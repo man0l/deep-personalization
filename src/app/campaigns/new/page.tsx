@@ -3,6 +3,8 @@ import { useState } from 'react'
 import { Input } from '@/components/ui/input'
 import { Textarea } from '@/components/ui/textarea'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
+import { useRouter } from 'next/navigation'
 
 export default function NewCampaignPage() {
   const [step, setStep] = useState(1)
@@ -14,6 +16,7 @@ export default function NewCampaignPage() {
   const [file, setFile] = useState<File|undefined>()
   const [saving, setSaving] = useState(false)
   const [inserted, setInserted] = useState<number|undefined>()
+  const router = useRouter()
 
   async function createCampaign() {
     setSaving(true)
@@ -41,10 +44,12 @@ export default function NewCampaignPage() {
     const json = await res.json()
     setSaving(false)
     if (!res.ok) {
-      alert(json.error || 'Failed to upload')
+      toast.error(json.error || 'Failed to upload')
       return
     }
     setInserted(json.inserted)
+    toast.success(`Imported ${json.inserted} leads`, { description: 'Open the campaign to see your leads' })
+    setTimeout(()=> router.push(`/campaigns/${campaignId}`), 600)
   }
 
   return (
@@ -91,7 +96,7 @@ export default function NewCampaignPage() {
             <input type="file" accept=".csv" onChange={(e)=>setFile(e.target.files?.[0])} />
           </div>
           <Button disabled={!file || saving} onClick={uploadCsv} className="bg-violet-600 hover:bg-violet-500">Upload</Button>
-          {inserted !== undefined && <p className="text-sm">Inserted {inserted} rows.</p>}
+          {inserted !== undefined && <p className="text-sm text-zinc-400">Inserted {inserted} rows.</p>}
         </section>
       )}
     </main>

@@ -35,7 +35,7 @@ create table if not exists leads (
 
 -- Simple unique index for upsert compatibility
 create unique index if not exists leads_unique_per_campaign_email_plain
-  on leads(campaign_id, email) where email is not null;
+  on leads(campaign_id, email);
 create index if not exists leads_campaign_idx on leads(campaign_id);
 create index if not exists leads_email_idx on leads(lower(coalesce(email,'')));
 create index if not exists leads_company_site_idx on leads(lower(coalesce(company_website,'')));

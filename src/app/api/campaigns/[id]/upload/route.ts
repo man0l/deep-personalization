@@ -46,26 +46,32 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     raw: r,
   }))
 
+  // Deduplicate within this batch by (campaign_id,email) to avoid
+  // "ON CONFLICT DO UPDATE command cannot affect row a second time".
+  const deduped: typeof mapped = []
+  const seen = new Set<string>()
+  for (const m of mapped) {
+    if (m.email) {
+      const key = `${m.campaign_id}:${m.email}`
+      if (seen.has(key)) continue
+      seen.add(key)
+      deduped.push(m)
+    } else {
+      deduped.push(m)
+    }
+  }
+
   const chunkSize = 500
   let inserted = 0
   const supa = supabaseServer()
-  for (let i = 0; i < mapped.length; i += chunkSize) {
-    const chunk = mapped.slice(i, i + chunkSize)
-    const { error, count } = await supa
+  for (let i = 0; i < deduped.length; i += chunkSize) {
+    const chunk = deduped.slice(i, i + chunkSize)
+    const { error: upsertErr, count: upsertCount } = await supa
       .from('leads')
-      .insert(chunk, { count: 'exact' })
+      .upsert(chunk, { onConflict: 'campaign_id,email', ignoreDuplicates: false, count: 'exact' })
       .select('id')
-    if (error) {
-      // try dedupe-aware upsert by email
-      const { error: upsertErr, count: upsertCount } = await supa
-        .from('leads')
-        .upsert(chunk, { onConflict: 'campaign_id,email', ignoreDuplicates: false, count: 'exact' })
-        .select('id')
-      if (upsertErr) return NextResponse.json({ error: upsertErr.message }, { status: 500 })
-      inserted += upsertCount ?? 0
-    } else {
-      inserted += count ?? 0
-    }
+    if (upsertErr) return NextResponse.json({ error: upsertErr.message }, { status: 500 })
+    inserted += upsertCount ?? 0
   }
 
   return NextResponse.json({ inserted })
