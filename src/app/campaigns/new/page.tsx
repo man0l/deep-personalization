@@ -1,5 +1,8 @@
 "use client"
 import { useState } from 'react'
+import { Input } from '@/components/ui/input'
+import { Textarea } from '@/components/ui/textarea'
+import { Button } from '@/components/ui/button'
 
 export default function NewCampaignPage() {
   const [step, setStep] = useState(1)
@@ -45,49 +48,49 @@ export default function NewCampaignPage() {
   }
 
   return (
-    <main className="p-8 space-y-6">
-      <h1 className="text-2xl font-semibold">New Campaign</h1>
+    <main className="space-y-6">
+      <h1 className="text-2xl font-semibold text-violet-300">New Campaign</h1>
       <div className="space-x-2">
-        <button className={`underline ${step===1?'font-bold':''}`} onClick={()=>setStep(1)}>1. Details</button>
-        <button className={`underline ${step===2?'font-bold':''}`} onClick={()=>setStep(2)} disabled={!name || !serviceLine}>2. Prompts</button>
-        <button className={`underline ${step===3?'font-bold':''}`} onClick={()=>setStep(3)} disabled={!campaignId}>3. Upload CSV</button>
+        <button className={`underline ${step===1?'text-violet-300':'text-zinc-400'}`} onClick={()=>setStep(1)}>1. Details</button>
+        <button className={`underline ${step===2?'text-violet-300':'text-zinc-400'}`} onClick={()=>setStep(2)} disabled={!name || !serviceLine}>2. Prompts</button>
+        <button className={`underline ${step===3?'text-violet-300':'text-zinc-400'}`} onClick={()=>setStep(3)} disabled={!campaignId}>3. Upload CSV</button>
       </div>
 
       {step===1 && (
         <section className="space-y-4">
           <div>
-            <label className="block text-sm font-medium">Campaign name</label>
-            <input className="border px-2 py-1 w-full" value={name} onChange={(e)=>setName(e.target.value)} placeholder="e.g., SEO Agencies - Oct" />
+            <label className="block text-sm font-medium text-zinc-300">Campaign name</label>
+            <Input value={name} onChange={(e)=>setName(e.target.value)} placeholder="e.g., SEO Agencies - Oct" />
           </div>
           <div>
-            <label className="block text-sm font-medium">Service line (used in icebreaker)</label>
-            <textarea className="border px-2 py-1 w-full" rows={3} value={serviceLine} onChange={(e)=>setServiceLine(e.target.value)} placeholder="To make a long story short, ..." />
+            <label className="block text-sm font-medium text-zinc-300">Service line (used in icebreaker)</label>
+            <Textarea rows={3} value={serviceLine} onChange={(e)=>setServiceLine(e.target.value)} placeholder="To make a long story short, ..." />
           </div>
-          <button className="border px-3 py-1" disabled={!name || !serviceLine} onClick={()=>setStep(2)}>Continue</button>
+          <Button disabled={!name || !serviceLine} onClick={()=>setStep(2)} className="bg-violet-600 hover:bg-violet-500">Continue</Button>
         </section>
       )}
 
       {step===2 && (
         <section className="space-y-4">
           <div>
-            <label className="block text-sm font-medium">Summarize prompt</label>
-            <textarea className="border px-2 py-1 w-full" rows={8} value={summarizePrompt} onChange={(e)=>setSummarizePrompt(e.target.value)} />
+            <label className="block text-sm font-medium text-zinc-300">Summarize prompt</label>
+            <Textarea rows={8} value={summarizePrompt} onChange={(e)=>setSummarizePrompt(e.target.value)} />
           </div>
           <div>
-            <label className="block text-sm font-medium">Icebreaker prompt</label>
-            <textarea className="border px-2 py-1 w-full" rows={8} value={icePrompt} onChange={(e)=>setIcePrompt(e.target.value)} />
+            <label className="block text-sm font-medium text-zinc-300">Icebreaker prompt</label>
+            <Textarea rows={8} value={icePrompt} onChange={(e)=>setIcePrompt(e.target.value)} />
           </div>
-          <button className="border px-3 py-1" disabled={saving} onClick={createCampaign}>Save Campaign</button>
+          <Button disabled={saving} onClick={createCampaign} className="bg-violet-600 hover:bg-violet-500">Save Campaign</Button>
         </section>
       )}
 
       {step===3 && (
         <section className="space-y-4">
           <div>
-            <label className="block text-sm font-medium">Upload CSV</label>
+            <label className="block text-sm font-medium text-zinc-300">Upload CSV</label>
             <input type="file" accept=".csv" onChange={(e)=>setFile(e.target.files?.[0])} />
           </div>
-          <button className="border px-3 py-1" disabled={!file || saving} onClick={uploadCsv}>Upload</button>
+          <Button disabled={!file || saving} onClick={uploadCsv} className="bg-violet-600 hover:bg-violet-500">Upload</Button>
           {inserted !== undefined && <p className="text-sm">Inserted {inserted} rows.</p>}
         </section>
       )}

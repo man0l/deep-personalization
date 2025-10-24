@@ -1,4 +1,6 @@
 import Link from 'next/link'
+import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
+import { Button } from '@/components/ui/button'
 
 async function fetchCampaigns() {
   const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/campaigns`, { cache: 'no-store' })
@@ -10,25 +12,35 @@ async function fetchCampaigns() {
 export default async function CampaignsHome() {
   const campaigns = await fetchCampaigns()
   return (
-    <main className="p-8 space-y-4">
+    <main className="space-y-6">
       <div className="flex items-center justify-between">
-        <h1 className="text-2xl font-semibold">Campaigns</h1>
-        <Link href="/campaigns/new" className="underline">Create Campaign</Link>
+        <h1 className="text-2xl font-semibold text-violet-300">Campaigns</h1>
+        <Button asChild className="bg-violet-600 hover:bg-violet-500 text-white">
+          <Link href="/campaigns/new">Create Campaign</Link>
+        </Button>
       </div>
-      <ul className="space-y-2">
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {campaigns.map((c) => (
-          <li key={c.id} className="border p-3 rounded">
-            <div className="flex items-center justify-between">
-              <div>
-                <div className="font-medium">{c.name}</div>
-                <div className="text-sm text-zinc-600">{c.service_line}</div>
+          <Card key={c.id} className="bg-zinc-900 border-zinc-800">
+            <CardHeader>
+              <CardTitle className="text-zinc-100">{c.name}</CardTitle>
+            </CardHeader>
+            <CardContent>
+              <p className="text-sm text-zinc-400 line-clamp-3">{c.service_line}</p>
+              <div className="mt-4 flex justify-end">
+                <Button asChild variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">
+                  <Link href={`/campaigns/${c.id}`}>Open</Link>
+                </Button>
               </div>
-              <Link href={`/campaigns/${c.id}`} className="underline">Open</Link>
-            </div>
-          </li>
+            </CardContent>
+          </Card>
         ))}
-        {campaigns.length === 0 && <li className="text-sm text-zinc-600">No campaigns yet.</li>}
-      </ul>
+        {campaigns.length === 0 && (
+          <Card className="bg-zinc-900 border-zinc-800">
+            <CardContent className="p-6 text-zinc-400">No campaigns yet.</CardContent>
+          </Card>
+        )}
+      </div>
     </main>
   )
 }

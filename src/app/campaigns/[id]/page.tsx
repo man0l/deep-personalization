@@ -1,6 +1,8 @@
 "use client"
 import { useEffect, useMemo, useState } from 'react'
 import { ColumnDef, flexRender, getCoreRowModel, getPaginationRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table'
+import { Input } from '@/components/ui/input'
+import { Button } from '@/components/ui/button'
 
 type Lead = {
   id: string
@@ -91,8 +93,8 @@ export default function CampaignDetail({ params }: { params: { id: string } }) {
   }
 
   return (
-    <main className="p-6 space-y-4">
-      <div className="text-sm text-zinc-700 flex gap-4">
+    <main className="space-y-4">
+      <div className="text-sm text-zinc-400 flex gap-4">
         <span>Total: {totals.total ?? 0}</span>
         <span>Done: {totals.done ?? 0}</span>
         <span>Queued: {totals.queued ?? 0}</span>
@@ -100,23 +102,23 @@ export default function CampaignDetail({ params }: { params: { id: string } }) {
         <span>Error: {totals.error ?? 0}</span>
       </div>
       <div className="flex items-center gap-4">
-        <input className="border px-2 py-1" placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') { setPage(1); load() } }} />
-        <select className="border px-2 py-1" value={hasIce} onChange={(e)=>{ setHasIce(e.target.value as any); setPage(1) }}>
+        <Input placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') { setPage(1); load() } }} />
+        <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" value={hasIce} onChange={(e)=>{ setHasIce(e.target.value as any); setPage(1) }}>
           <option value="all">All</option>
           <option value="true">Has Ice</option>
           <option value="false">No Ice</option>
         </select>
-        <button className="border px-3 py-1" onClick={()=>enrich(selectedIds)} disabled={selectedIds.length===0}>Enrich Selected</button>
-        <button className="border px-3 py-1" onClick={enrichAllMissing}>Enrich All Missing (page)</button>
+        <Button onClick={()=>enrich(selectedIds)} disabled={selectedIds.length===0} className="bg-violet-600 hover:bg-violet-500">Enrich Selected</Button>
+        <Button onClick={enrichAllMissing} variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">Enrich All Missing (page)</Button>
       </div>
 
-      <div className="overflow-auto border rounded">
+      <div className="overflow-auto border border-zinc-800 rounded">
         <table className="min-w-full text-sm">
           <thead>
             {table.getHeaderGroups().map(hg=> (
-              <tr key={hg.id}>
+              <tr key={hg.id} className="bg-zinc-900">
                 {hg.headers.map(h=> (
-                  <th key={h.id} className="text-left p-2 border-b">
+                  <th key={h.id} className="text-left p-2 border-b border-zinc-800">
                     {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
                   </th>
                 ))}
@@ -125,9 +127,9 @@ export default function CampaignDetail({ params }: { params: { id: string } }) {
           </thead>
           <tbody>
             {table.getRowModel().rows.map(r=> (
-              <tr key={r.id} className="odd:bg-zinc-50">
+              <tr key={r.id} className="odd:bg-zinc-900">
                 {r.getVisibleCells().map(c=> (
-                  <td key={c.id} className="p-2 border-b">{flexRender(c.column.columnDef.cell, c.getContext())}</td>
+                  <td key={c.id} className="p-2 border-b border-zinc-800">{flexRender(c.column.columnDef.cell, c.getContext())}</td>
                 ))}
               </tr>
             ))}
@@ -136,15 +138,15 @@ export default function CampaignDetail({ params }: { params: { id: string } }) {
       </div>
 
       <div className="flex items-center gap-3">
-        <button className="border px-3 py-1" onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>Prev</button>
+        <Button variant="secondary" className="bg-zinc-900 border border-zinc-800" onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>Prev</Button>
         <span>Page {page}</span>
-        <button className="border px-3 py-1" onClick={()=>{
+        <Button variant="secondary" className="bg-zinc-900 border border-zinc-800" onClick={()=>{
           if (page*pageSize < total) setPage(p=>p+1)
-        }} disabled={page*pageSize>=total}>Next</button>
-        <select className="border px-2 py-1" value={pageSize} onChange={(e)=>{ setPageSize(Number(e.target.value)); setPage(1) }}>
+        }} disabled={page*pageSize>=total}>Next</Button>
+        <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" value={pageSize} onChange={(e)=>{ setPageSize(Number(e.target.value)); setPage(1) }}>
           {[25,50,100,200].map(n=> <option key={n} value={n}>{n}/page</option>)}
         </select>
-        <span className="text-sm text-zinc-600">Total: {total}</span>
+        <span className="text-sm text-zinc-400">Total: {total}</span>
       </div>
     </main>
   )
