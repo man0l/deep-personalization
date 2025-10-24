@@ -56,26 +56,36 @@ create table if not exists enrichment_jobs (
 create extension if not exists pgmq;
 select pgmq.create('lead_enrichment');
 
+-- Permissions for pgmq so RPCs can call its functions
+grant usage on schema pgmq to service_role, authenticated, anon;
+grant execute on all functions in schema pgmq to service_role, authenticated, anon;
+
 -- Public wrappers for pgmq to use via PostgREST
 create or replace function public.enqueue_lead_enrichment(lid uuid)
 returns bigint
 language sql
+security definer
+set search_path = public, pgmq
 as $$
-  select pgmq.send('lead_enrichment', json_build_object('leadId', lid)::jsonb);
+  select pgmq.send('lead_enrichment', jsonb_build_object('leadId', lid));
 $$;
 
 create or replace function public.dequeue_lead_enrichment(cnt int default 10, vt_seconds int default 60)
 returns table(msg_id bigint, message jsonb)
 language sql
+security definer
+set search_path = public, pgmq
 as $$
-  select msg_id, message from pgmq.read('lead_enrichment', cnt, vt_seconds);
+  select r.msg_id, r.message from pgmq.read('lead_enrichment', vt_seconds, cnt) as r;
 $$;
 
 create or replace function public.ack_lead_enrichment(mid bigint)
-returns void
+returns boolean
 language sql
+security definer
+set search_path = public, pgmq
 as $$
-  select pgmq.ack('lead_enrichment', mid);
+  select pgmq.archive('lead_enrichment', mid);
 $$;
 
 
