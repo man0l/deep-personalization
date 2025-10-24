@@ -37,11 +37,10 @@ export default function CampaignDetail() {
   const [hasIce, setHasIce] = useState<'all'|'true'|'false'>('all')
   const [selected, setSelected] = useState<Record<string, boolean>>({})
   const [visibleCols, setVisibleCols] = useState<Record<string, boolean>>(()=>{
-    const base: Record<string, boolean> = {
+    return {
       select: true, full_name: true, title: true, company_name: true, company_website: true, email: true,
       industry: true, city: true, state: true, country: true, ice_status: true, actions: true,
     }
-    try { const v = localStorage.getItem(`view:${id}:visibleCols`); return v? { ...base, ...JSON.parse(v)}: base } catch { return base }
   })
   useEffect(()=>{ try { localStorage.setItem(`view:${id}:visibleCols`, JSON.stringify(visibleCols)) } catch{} }, [id, visibleCols])
   const [filtersOpen, setFiltersOpen] = useState(false)
@@ -55,11 +54,22 @@ export default function CampaignDetail() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [detailsLead, setDetailsLead] = useState<Lead | null>(null)
   const [statusDraft, setStatusDraft] = useState<string>('none')
-  const [density, setDensity] = useState<'comfortable'|'compact'>(()=>{
-    try { return (localStorage.getItem(`view:${id}:density`) as any) || 'comfortable' } catch { return 'comfortable' }
-  })
+  const [density, setDensity] = useState<'comfortable'|'compact'>(()=> 'comfortable')
   useEffect(()=>{ try { localStorage.setItem(`view:${id}:density`, density) } catch{} }, [id, density])
   const [statusFilter, setStatusFilter] = useState<'queued'|'processing'|'error'|null>(null)
+
+  // After mount, hydrate preferences from localStorage to avoid SSR/client mismatch
+  useEffect(()=>{
+    if (!mounted) return
+    try {
+      const v = localStorage.getItem(`view:${id}:visibleCols`)
+      if (v) setVisibleCols((base)=> ({ ...base, ...JSON.parse(v) }))
+    } catch {}
+    try {
+      const d = localStorage.getItem(`view:${id}:density`) as any
+      if (d === 'comfortable' || d === 'compact') setDensity(d)
+    } catch {}
+  }, [mounted, id])
 
   async function load() {
     // stats
@@ -196,10 +206,12 @@ export default function CampaignDetail() {
   // Views: sticky first N columns + wide table for smooth horizontal scroll
   const colWidths = [40, 220, 230, 300, 240, 260, 260, 180, 160, 170, 120, 160]
   const totalWidth = colWidths.reduce((a,b)=>a+b,0)
-  const [frozenCount, setFrozenCount] = useState<number>(()=>{
-    try { const v = localStorage.getItem(`view:${id}:frozenCount`); return v? Number(v):2 } catch { return 2 }
-  })
+  const [frozenCount, setFrozenCount] = useState<number>(()=> 2)
   useEffect(()=>{ try { localStorage.setItem(`view:${id}:frozenCount`, String(frozenCount)) } catch{} }, [id, frozenCount])
+  useEffect(()=>{
+    if (!mounted) return
+    try { const v = localStorage.getItem(`view:${id}:frozenCount`); if (v) setFrozenCount(Number(v)) } catch {}
+  }, [mounted, id])
   const leftOf = (i:number) => colWidths.slice(0,i).reduce((a,b)=>a+b,0)
 
   return (
