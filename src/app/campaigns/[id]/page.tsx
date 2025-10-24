@@ -59,6 +59,7 @@ export default function CampaignDetail() {
     try { return (localStorage.getItem(`view:${id}:density`) as any) || 'comfortable' } catch { return 'comfortable' }
   })
   useEffect(()=>{ try { localStorage.setItem(`view:${id}:density`, density) } catch{} }, [id, density])
+  const [statusFilter, setStatusFilter] = useState<'queued'|'processing'|'error'|null>(null)
 
   async function load() {
     // stats
@@ -67,7 +68,11 @@ export default function CampaignDetail() {
     if (statsRes.ok) setTotals(stats.totals || {})
     const paramsQ = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
     if (q) paramsQ.set('q', q)
-    if (hasIce !== 'all') paramsQ.set('hasIce', hasIce)
+    if (statusFilter) {
+      paramsQ.set('status', statusFilter)
+    } else {
+      if (hasIce !== 'all') paramsQ.set('hasIce', hasIce)
+    }
     if (filters.full_name) paramsQ.set('f_full_name', filters.full_name)
     if (filters.title) paramsQ.set('f_title', filters.title)
     if (filters.company_name) paramsQ.set('f_company_name', filters.company_name)
@@ -83,7 +88,7 @@ export default function CampaignDetail() {
     }
   }
 
-  useEffect(() => { load() }, [page, pageSize, hasIce, q, sortBy, sortDir, filters.full_name, filters.title, filters.company_name, filters.email])
+  useEffect(() => { load() }, [page, pageSize, hasIce, statusFilter, q, sortBy, sortDir, filters.full_name, filters.title, filters.company_name, filters.email])
 
   async function selectVisiblePageRows(flag: boolean) {
     const newSel = { ...selected }
@@ -200,11 +205,22 @@ export default function CampaignDetail() {
   return (
     <main className="space-y-4">
       <div className="text-sm text-zinc-400 flex gap-4">
-        <span>Total: {totals.total ?? 0}</span>
-        <button className={`hover:text-violet-300 ${hasIce==='true'?'text-violet-300':''}`} onClick={()=>{ setHasIce('true'); setPage(1); setTimeout(()=>load(),0) }}>Done: {totals.done ?? 0}</button>
-        <button className="hover:text-violet-300" onClick={()=>{ const u = new URLSearchParams({ page:'1', pageSize:String(pageSize), status:'queued' }); fetch(`/api/campaigns/${id}/leads?`+u.toString(), { cache:'no-store' }).then(()=>{ setHasIce('all'); /* UI hint */ }) }}>Queued: {totals.queued ?? 0}</button>
-        <button className="hover:text-violet-300" onClick={()=>{ setQ(''); setFilters({ full_name:'', title:'', company_name:'', email:'' }); const s=new URLSearchParams({ page:'1', pageSize:String(pageSize), status:'processing' }); fetch(`/api/campaigns/${id}/leads?`+s.toString(), { cache:'no-store' }).then(async r=>{ const j=await r.json(); if(r.ok){ setData(j.leads||[]); setTotal(j.total||0); } }) }}>Processing: {totals.processing ?? 0}</button>
-        <button className="hover:text-violet-300" onClick={()=>{ const s=new URLSearchParams({ page:'1', pageSize:String(pageSize), status:'error' }); fetch(`/api/campaigns/${id}/leads?`+s.toString(), { cache:'no-store' }).then(async r=>{ const j=await r.json(); if(r.ok){ setData(j.leads||[]); setTotal(j.total||0); } }) }}>Error: {totals.error ?? 0}</button>
+        <button
+          className="hover:text-violet-300"
+          onClick={()=>{
+            setStatusFilter(null)
+            setHasIce('all')
+            setQ('')
+            setFilters({ full_name:'', title:'', company_name:'', email:'' })
+            setPage(1)
+          }}
+        >
+          Total: {totals.total ?? 0}
+        </button>
+        <button className={`hover:text-violet-300 ${(!statusFilter && hasIce==='true')?'text-violet-300':''}`} onClick={()=>{ setStatusFilter(null); setHasIce('true'); setPage(1) }}>Done: {totals.done ?? 0}</button>
+        <button className={`hover:text-violet-300 ${statusFilter==='queued'?'text-violet-300':''}`} onClick={()=>{ setStatusFilter('queued'); setHasIce('all'); setPage(1) }}>Queued: {totals.queued ?? 0}</button>
+        <button className={`hover:text-violet-300 ${statusFilter==='processing'?'text-violet-300':''}`} onClick={()=>{ setStatusFilter('processing'); setHasIce('all'); setQ(''); setFilters({ full_name:'', title:'', company_name:'', email:'' }); setPage(1) }}>Processing: {totals.processing ?? 0}</button>
+        <button className={`hover:text-violet-300 ${statusFilter==='error'?'text-violet-300':''}`} onClick={()=>{ setStatusFilter('error'); setHasIce('all'); setPage(1) }}>Error: {totals.error ?? 0}</button>
       </div>
       <div className="flex items-center gap-4">
         <Input placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') { setPage(1); load() } }} />
