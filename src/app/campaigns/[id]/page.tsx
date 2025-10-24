@@ -6,6 +6,7 @@ import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
 import { Checkbox } from '@/components/ui/checkbox'
+import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
 type Lead = {
   id: string
@@ -20,6 +21,7 @@ type Lead = {
   city: string | null
   state: string | null
   country: string | null
+  ice_breaker: string | null
   ice_status: string
 }
 
@@ -49,6 +51,14 @@ export default function CampaignDetail() {
   const [selectAllBusy, setSelectAllBusy] = useState(false)
   const [mounted, setMounted] = useState(false)
   useEffect(()=>{ setMounted(true) }, [])
+
+  const [detailsOpen, setDetailsOpen] = useState(false)
+  const [detailsLead, setDetailsLead] = useState<Lead | null>(null)
+  const [statusDraft, setStatusDraft] = useState<string>('none')
+  const [density, setDensity] = useState<'comfortable'|'compact'>(()=>{
+    try { return (localStorage.getItem(`view:${id}:density`) as any) || 'comfortable' } catch { return 'comfortable' }
+  })
+  useEffect(()=>{ try { localStorage.setItem(`view:${id}:density`, density) } catch{} }, [id, density])
 
   async function load() {
     // stats
@@ -111,6 +121,25 @@ export default function CampaignDetail() {
     setSelectAllBusy(false)
   }
 
+  function buildSortHeader(label: string, key: string) {
+    const active = sortBy === key
+    const indicator = active ? (sortDir === 'asc' ? '▲' : '▼') : ''
+    return (
+      <button
+        className={`inline-flex items-center gap-1 ${active? 'text-violet-300':'text-zinc-300'}`}
+        onClick={()=>{
+          if (sortBy !== key) { setSortBy(key); setSortDir('asc') }
+          else { setSortDir(sortDir === 'asc' ? 'desc' : 'asc') }
+          setPage(1)
+          setTimeout(()=>load(), 0)
+        }}
+      >
+        <span>{label}</span>
+        {indicator && <span aria-hidden>{indicator}</span>}
+      </button>
+    )
+  }
+
   const columns = useMemo<ColumnDef<Lead>[]>(() => [
     visibleCols.select ? { header: (
       <div className="flex items-center gap-2">
@@ -120,23 +149,24 @@ export default function CampaignDetail() {
     ), id: 'select', cell: ({ row }: any) => (
       <input type="checkbox" checked={!!selected[row.original.id]} onChange={e=>setSelected(s=>({ ...s, [row.original.id]: e.target.checked }))} />
     ) } : undefined,
-    visibleCols.full_name ? { header: 'Name', accessorKey: 'full_name' } : undefined,
-    visibleCols.title ? { header: 'Title', accessorKey: 'title' } : undefined,
-    visibleCols.company_name ? { header: 'Company', accessorKey: 'company_name' } : undefined,
-    visibleCols.company_website ? { header: 'Website', accessorKey: 'company_website' } : undefined,
-    visibleCols.email ? { header: 'Email', accessorKey: 'email' } : undefined,
-    visibleCols.industry ? { header: 'Industry', accessorKey: 'industry' } : undefined,
-    visibleCols.city ? { header: 'City', accessorKey: 'city' } : undefined,
-    visibleCols.state ? { header: 'State', accessorKey: 'state' } : undefined,
-    visibleCols.country ? { header: 'Country', accessorKey: 'country' } : undefined,
-    visibleCols.ice_status ? { header: 'Ice', accessorKey: 'ice_status' } : undefined,
+    visibleCols.full_name ? { header: () => buildSortHeader('Name','full_name'), accessorKey: 'full_name' } : undefined,
+    visibleCols.title ? { header: () => buildSortHeader('Title','title'), accessorKey: 'title' } : undefined,
+    visibleCols.company_name ? { header: () => buildSortHeader('Company','company_name'), accessorKey: 'company_name' } : undefined,
+    visibleCols.company_website ? { header: () => buildSortHeader('Website','company_website'), accessorKey: 'company_website' } : undefined,
+    visibleCols.email ? { header: () => buildSortHeader('Email','email'), accessorKey: 'email' } : undefined,
+    visibleCols.industry ? { header: () => buildSortHeader('Industry','industry'), accessorKey: 'industry' } : undefined,
+    visibleCols.city ? { header: () => buildSortHeader('City','city'), accessorKey: 'city' } : undefined,
+    visibleCols.state ? { header: () => buildSortHeader('State','state'), accessorKey: 'state' } : undefined,
+    visibleCols.country ? { header: () => buildSortHeader('Country','country'), accessorKey: 'country' } : undefined,
+    visibleCols.ice_status ? { header: () => buildSortHeader('Ice','ice_status'), accessorKey: 'ice_status' } : undefined,
     visibleCols.actions ? { header: 'Actions', id: 'actions', cell: ({ row }: any) => (
       <div className="flex gap-2">
         <button className="underline" onClick={()=>enrich([row.original.id])}>Enrich</button>
         <button className="underline" onClick={async ()=>{ await fetch(`/api/leads/${row.original.id}`, { method: 'DELETE' }); await load() }}>Delete</button>
+        <button className="underline" onClick={()=>{ setDetailsLead(row.original as Lead); setStatusDraft((row.original as Lead).ice_status); setDetailsOpen(true) }}>Details</button>
       </div>
     ) } : undefined,
-  ].filter(Boolean) as ColumnDef<Lead>[], [selected, visibleCols])
+  ].filter(Boolean) as ColumnDef<Lead>[], [selected, visibleCols, sortBy, sortDir])
 
   const table = useReactTable({
     data,
@@ -171,10 +201,10 @@ export default function CampaignDetail() {
     <main className="space-y-4">
       <div className="text-sm text-zinc-400 flex gap-4">
         <span>Total: {totals.total ?? 0}</span>
-        <span>Done: {totals.done ?? 0}</span>
-        <span>Queued: {totals.queued ?? 0}</span>
-        <span>Processing: {totals.processing ?? 0}</span>
-        <span>Error: {totals.error ?? 0}</span>
+        <button className={`hover:text-violet-300 ${hasIce==='true'?'text-violet-300':''}`} onClick={()=>{ setHasIce('true'); setPage(1); setTimeout(()=>load(),0) }}>Done: {totals.done ?? 0}</button>
+        <button className="hover:text-violet-300" onClick={()=>{ const u = new URLSearchParams({ page:'1', pageSize:String(pageSize), status:'queued' }); fetch(`/api/campaigns/${id}/leads?`+u.toString(), { cache:'no-store' }).then(()=>{ setHasIce('all'); /* UI hint */ }) }}>Queued: {totals.queued ?? 0}</button>
+        <button className="hover:text-violet-300" onClick={()=>{ setQ(''); setFilters({ full_name:'', title:'', company_name:'', email:'' }); const s=new URLSearchParams({ page:'1', pageSize:String(pageSize), status:'processing' }); fetch(`/api/campaigns/${id}/leads?`+s.toString(), { cache:'no-store' }).then(async r=>{ const j=await r.json(); if(r.ok){ setData(j.leads||[]); setTotal(j.total||0); } }) }}>Processing: {totals.processing ?? 0}</button>
+        <button className="hover:text-violet-300" onClick={()=>{ const s=new URLSearchParams({ page:'1', pageSize:String(pageSize), status:'error' }); fetch(`/api/campaigns/${id}/leads?`+s.toString(), { cache:'no-store' }).then(async r=>{ const j=await r.json(); if(r.ok){ setData(j.leads||[]); setTotal(j.total||0); } }) }}>Error: {totals.error ?? 0}</button>
       </div>
       <div className="flex items-center gap-4">
         <Input placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') { setPage(1); load() } }} />
@@ -217,6 +247,23 @@ export default function CampaignDetail() {
             </div>
           </DialogContent>
         </Dialog>
+        <DropdownMenu>
+          <DropdownMenuTrigger asChild>
+            <Button variant="secondary" className="bg-zinc-900 border border-zinc-800">View</Button>
+          </DropdownMenuTrigger>
+          <DropdownMenuContent align="end" className="bg-zinc-950 border-zinc-800">
+            <DropdownMenuLabel>Density</DropdownMenuLabel>
+            <DropdownMenuCheckboxItem checked={density==='comfortable'} onCheckedChange={()=>setDensity('comfortable')}>Comfortable</DropdownMenuCheckboxItem>
+            <DropdownMenuCheckboxItem checked={density==='compact'} onCheckedChange={()=>setDensity('compact')}>Compact</DropdownMenuCheckboxItem>
+            <DropdownMenuSeparator />
+            <DropdownMenuLabel>Columns</DropdownMenuLabel>
+            {['full_name','title','company_name','company_website','email','industry','city','state','country','ice_status'].map(k=> (
+              <DropdownMenuCheckboxItem key={k} checked={!!visibleCols[k]} onCheckedChange={(v)=> setVisibleCols(c=> ({ ...c, [k]: Boolean(v) }))}>
+                {k.replace('_',' ')}
+              </DropdownMenuCheckboxItem>
+            ))}
+          </DropdownMenuContent>
+        </DropdownMenu>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs text-zinc-400">Sort</span>
           <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" value={sortBy} onChange={e=>{ setSortBy(e.target.value as any); setPage(1) }}>
@@ -232,18 +279,25 @@ export default function CampaignDetail() {
           </select>
         </div>
       </div>
+      {selectedIds.length>0 && (
+        <div className="flex items-center gap-3 text-sm text-zinc-300 bg-zinc-900/60 border border-zinc-800 rounded px-3 py-2">
+          <span>{selectedIds.length} selected</span>
+          <Button variant="secondary" className="bg-zinc-800/60" onClick={()=>setSelected({})}>Clear</Button>
+        </div>
+      )}
 
-      <div className="overflow-auto border border-zinc-800 rounded">
-        <table className="text-sm" style={{ minWidth: totalWidth }}>
+      <div className="overflow-x-auto border border-zinc-800 rounded">
+        <table className={`w-full text-sm`} style={{ minWidth: totalWidth }}>
           <thead>
             {table.getHeaderGroups().map(hg=> (
-              <tr key={hg.id} className="bg-zinc-900">
+              <tr key={hg.id} className="bg-zinc-900 sticky top-0 z-30">
                 {hg.headers.map((h, i)=> {
                   const isFrozen = mounted && i < frozenCount
+                  const headPad = density==='compact'? 'py-1 px-2' : 'p-2'
                   return (
                     <th
                       key={h.id}
-                      className={`text-left p-2 border-b border-zinc-800 ${isFrozen ? 'sticky z-20 bg-zinc-900' : ''}`}
+                      className={`text-left ${headPad} border-b border-zinc-800 ${isFrozen ? 'sticky z-20 bg-zinc-900' : ''}`}
                       style={{ left: isFrozen ? leftOf(i) : undefined, width: colWidths[i] }}
                     >
                       {h.isPlaceholder ? null : flexRender(h.column.columnDef.header, h.getContext())}
@@ -258,10 +312,11 @@ export default function CampaignDetail() {
               <tr key={r.id} className="odd:bg-zinc-900">
                 {r.getVisibleCells().map((c, i)=> {
                   const isFrozen = mounted && i < frozenCount
+                  const cellPad = density==='compact'? 'py-1 px-2' : 'p-2'
                   return (
                     <td
                       key={c.id}
-                      className={`p-2 border-b border-zinc-800 ${isFrozen ? 'sticky z-10 bg-zinc-950' : ''}`}
+                      className={`${cellPad} border-b border-zinc-800 ${isFrozen ? 'sticky z-10 bg-zinc-950' : ''}`}
                       style={{ left: isFrozen ? leftOf(i) : undefined, width: colWidths[i] }}
                     >
                       {flexRender(c.column.columnDef.cell, c.getContext())}
@@ -274,7 +329,44 @@ export default function CampaignDetail() {
         </table>
       </div>
 
-      <div className="flex items-center gap-3">
+      {/* Details Dialog */}
+      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
+        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-3xl">
+          <DialogHeader>
+            <DialogTitle>Lead details</DialogTitle>
+          </DialogHeader>
+          {detailsLead && (
+            <div className="space-y-4">
+              <div className="text-sm text-zinc-300">
+                <div className="font-medium text-white">{detailsLead.full_name || '(No name)'} • {detailsLead.company_name || ''}</div>
+                <div className="text-xs text-zinc-500">{detailsLead.email || ''}</div>
+              </div>
+              <div>
+                <label className="text-xs text-zinc-400">Status</label>
+                <div className="mt-1">
+                  <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" value={statusDraft} onChange={(e)=>setStatusDraft(e.target.value)}>
+                    {['none','queued','processing','done','error'].map(s=> <option key={s} value={s}>{s}</option>)}
+                  </select>
+                  <Button className="ml-2 bg-violet-600 hover:bg-violet-500" onClick={async ()=>{
+                    if (!detailsLead) return
+                    await fetch(`/api/leads/${detailsLead.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ice_status: statusDraft }) })
+                    setData(d=> d.map(l=> l.id===detailsLead.id? { ...l, ice_status: statusDraft }: l))
+                  }}>Save</Button>
+                </div>
+                {detailsLead.ice_status === 'error' && (
+                  <ErrorBlock leadId={detailsLead.id} />
+                )}
+              </div>
+              <div>
+                <label className="text-xs text-zinc-400">Ice breaker</label>
+                <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap break-words bg-zinc-900 border border-zinc-800 rounded p-3 text-zinc-200">{detailsLead.ice_breaker || '—'}</pre>
+              </div>
+            </div>
+          )}
+        </DialogContent>
+      </Dialog>
+
+      <div className="flex items-center gap-3 sticky bottom-0 z-30 bg-zinc-950 border-t border-zinc-800 py-2">
         <Button variant="secondary" className="bg-zinc-900 border border-zinc-800" onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>Prev</Button>
         <span>Page {page}</span>
         <Button variant="secondary" className="bg-zinc-900 border border-zinc-800" onClick={()=>{
@@ -293,6 +385,28 @@ export default function CampaignDetail() {
         </div>
       </div>
     </main>
+  )
+}
+
+function ErrorBlock({ leadId }: { leadId: string }) {
+  const [msg, setMsg] = useState<string>('')
+  useEffect(()=>{
+    let cancelled = false
+    ;(async()=>{
+      try {
+        const res = await fetch(`/api/leads/${leadId}/job`)
+        const j = await res.json()
+        if (!cancelled && res.ok) setMsg(j.job?.error || '')
+      } catch {}
+    })()
+    return ()=>{ cancelled = true }
+  }, [leadId])
+  if (!msg) return null
+  return (
+    <div className="mt-3 text-sm">
+      <div className="text-xs text-red-300 mb-1">Last error</div>
+      <pre className="bg-zinc-900 border border-red-900/40 text-red-300 rounded p-2 whitespace-pre-wrap break-words">{msg}</pre>
+    </div>
   )
 }
 

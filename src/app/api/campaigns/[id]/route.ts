@@ -20,4 +20,18 @@ export async function GET(_req: Request, context: { params: Promise<{ id: string
   return NextResponse.json({ campaign, totals })
 }
 
+export async function PATCH(req: Request, context: { params: Promise<{ id: string }> | { id: string } }) {
+  const p: any = await (context.params as any)
+  const id = (p?.id || p?.then ? (await (context.params as Promise<{ id: string }>)).id : p.id)
+  const body = await req.json()
+  const allowed = ['name','service_line','summarize_prompt','icebreaker_prompt']
+  const updates: Record<string, any> = {}
+  for (const k of allowed) if (k in body) updates[k] = body[k]
+  if (Object.keys(updates).length === 0) return NextResponse.json({ updated: 0 })
+  const supa = supabaseServer()
+  const { error } = await supa.from('campaigns').update(updates).eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ updated: 1 })
+}
+
 

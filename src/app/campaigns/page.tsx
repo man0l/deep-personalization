@@ -51,7 +51,10 @@ export default async function CampaignsHome() {
                 <Badge className="bg-violet-700/40 text-violet-300 hover:bg-violet-700/50">Queued {c._stats?.queued ?? 0}</Badge>
                 <Badge className="bg-red-700/40 text-red-300 hover:bg-red-700/50">Error {c._stats?.error ?? 0}</Badge>
               </div>
-              <div className="mt-4 flex justify-end">
+              <div className="mt-4 flex justify-end gap-2">
+                <Button asChild variant="secondary" className="bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
+                  <Link href={`/campaigns/${c.id}/edit`}>Edit</Link>
+                </Button>
                 <Button asChild variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">
                   <Link href={`/campaigns/${c.id}`}>Open</Link>
                 </Button>

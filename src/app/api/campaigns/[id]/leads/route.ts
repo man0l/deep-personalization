@@ -8,6 +8,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   const page = Number(searchParams.get('page') || '1')
   const pageSize = Math.min(Number(searchParams.get('pageSize') || '50'), 200)
   const hasIce = searchParams.get('hasIce')
+  const status = searchParams.get('status') || undefined
   const q = searchParams.get('q')?.trim().toLowerCase()
   const sortBy = searchParams.get('sortBy') || undefined
   const sortDir = (searchParams.get('sortDir') as 'asc' | 'desc' | null) || undefined
@@ -21,6 +22,9 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   let query = supa.from('leads').select('*', { count: 'exact' }).eq('campaign_id', campaignId)
   if (hasIce === 'true') query = query.eq('ice_status', 'done')
   if (hasIce === 'false') query = query.neq('ice_status', 'done')
+  if (status && ['done','queued','processing','error','none'].includes(status)) {
+    query = query.eq('ice_status', status)
+  }
   if (q) {
     // Simple OR search across common fields
     query = query.or(
