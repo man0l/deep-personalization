@@ -1,16 +1,34 @@
 import Link from 'next/link'
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
-
-async function fetchCampaigns() {
-  const res = await fetch(`${process.env.NEXT_PUBLIC_BASE_URL || ''}/api/campaigns`, { cache: 'no-store' })
-  if (!res.ok) return [] as any[]
-  const json = await res.json()
-  return json.campaigns as any[]
-}
+import { Badge } from '@/components/ui/badge'
+import { supabaseServer } from '@/lib/supabase/server'
 
 export default async function CampaignsHome() {
-  const campaigns = await fetchCampaigns()
+  // Query directly from the server to avoid relative fetch issues
+  let campaigns: any[] = []
+  try {
+    const supa = supabaseServer()
+    const { data } = await supa.from('campaigns').select('*').order('created_at', { ascending: false })
+    campaigns = data || []
+    // attach quick stats per campaign
+    await Promise.all(
+      campaigns.map(async (c) => {
+        const totalRes = await supa.from('leads').select('id', { count: 'exact', head: true }).eq('campaign_id', c.id)
+        const doneRes = await supa.from('leads').select('id', { count: 'exact', head: true }).eq('campaign_id', c.id).eq('ice_status', 'done')
+        const queuedRes = await supa.from('leads').select('id', { count: 'exact', head: true }).eq('campaign_id', c.id).eq('ice_status', 'queued')
+        const errorRes = await supa.from('leads').select('id', { count: 'exact', head: true }).eq('campaign_id', c.id).eq('ice_status', 'error')
+        c._stats = {
+          total: totalRes.count ?? 0,
+          done: doneRes.count ?? 0,
+          queued: queuedRes.count ?? 0,
+          error: errorRes.count ?? 0,
+        }
+      })
+    )
+  } catch {
+    campaigns = []
+  }
   return (
     <main className="space-y-6">
       <div className="flex items-center justify-between">
@@ -21,12 +39,18 @@ export default async function CampaignsHome() {
       </div>
       <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
         {campaigns.map((c) => (
-          <Card key={c.id} className="bg-zinc-900 border-zinc-800">
+          <Card key={c.id} className="bg-zinc-900 border-zinc-800 hover:border-violet-700/60 transition-colors">
             <CardHeader>
               <CardTitle className="text-zinc-100">{c.name}</CardTitle>
             </CardHeader>
             <CardContent>
               <p className="text-sm text-zinc-400 line-clamp-3">{c.service_line}</p>
+              <div className="mt-3 flex flex-wrap gap-2">
+                <Badge variant="secondary" className="bg-zinc-800 border-zinc-700">Total {c._stats?.total ?? 0}</Badge>
+                <Badge className="bg-emerald-700/40 text-emerald-300 hover:bg-emerald-700/50">Done {c._stats?.done ?? 0}</Badge>
+                <Badge className="bg-violet-700/40 text-violet-300 hover:bg-violet-700/50">Queued {c._stats?.queued ?? 0}</Badge>
+                <Badge className="bg-red-700/40 text-red-300 hover:bg-red-700/50">Error {c._stats?.error ?? 0}</Badge>
+              </div>
               <div className="mt-4 flex justify-end">
                 <Button asChild variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">
                   <Link href={`/campaigns/${c.id}`}>Open</Link>

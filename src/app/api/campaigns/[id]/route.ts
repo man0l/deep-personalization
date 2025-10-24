@@ -1,8 +1,9 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 
-export async function GET(_req: Request, context: { params: Promise<{ id: string }> }) {
-  const { id } = await context.params
+export async function GET(_req: Request, context: { params: Promise<{ id: string }> | { id: string } }) {
+  const p: any = await (context.params as any)
+  const id = (p?.id || p?.then ? (await (context.params as Promise<{ id: string }>)).id : p.id)
   const supa = supabaseServer()
   const { data: campaign, error: cErr } = await supa.from('campaigns').select('*').eq('id', id).single()
   if (cErr || !campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
