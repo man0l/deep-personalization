@@ -51,4 +51,30 @@ create table if not exists enrichment_jobs (
   unique(lead_id)
 );
 
+-- Queue (pgmq) for lead enrichment
+create extension if not exists pgmq;
+select pgmq.create('lead_enrichment');
+
+-- Public wrappers for pgmq to use via PostgREST
+create or replace function public.enqueue_lead_enrichment(lid uuid)
+returns bigint
+language sql
+as $$
+  select pgmq.send('lead_enrichment', json_build_object('leadId', lid)::jsonb);
+$$;
+
+create or replace function public.dequeue_lead_enrichment(cnt int default 10, vt_seconds int default 60)
+returns table(msg_id bigint, message jsonb)
+language sql
+as $$
+  select msg_id, message from pgmq.read('lead_enrichment', cnt, vt_seconds);
+$$;
+
+create or replace function public.ack_lead_enrichment(mid bigint)
+returns void
+language sql
+as $$
+  select pgmq.ack('lead_enrichment', mid);
+$$;
+
 

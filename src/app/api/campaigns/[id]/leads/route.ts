@@ -1,15 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 
-export async function GET(_req: NextRequest, { params }: { params: { id: string } }) {
-  const campaignId = params.id
+export async function GET(_req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const { id: campaignId } = await context.params
   const searchParams = new URL(_req.url).searchParams
   const page = Number(searchParams.get('page') || '1')
   const pageSize = Math.min(Number(searchParams.get('pageSize') || '50'), 200)
   const hasIce = searchParams.get('hasIce')
   const q = searchParams.get('q')?.trim().toLowerCase()
 
-  let query = supabaseServer.from('leads').select('*', { count: 'exact' }).eq('campaign_id', campaignId)
+  const supa = supabaseServer()
+  let query = supa.from('leads').select('*', { count: 'exact' }).eq('campaign_id', campaignId)
   if (hasIce === 'true') query = query.eq('ice_status', 'done')
   if (hasIce === 'false') query = query.neq('ice_status', 'done')
   if (q) {

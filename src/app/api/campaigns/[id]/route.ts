@@ -1,22 +1,20 @@
 import { NextResponse } from 'next/server'
 import { supabaseServer } from '@/lib/supabase/server'
 
-export async function GET(_req: Request, { params }: { params: { id: string } }) {
-  const id = params.id
-  const { data: campaign, error: cErr } = await supabaseServer.from('campaigns').select('*').eq('id', id).single()
+export async function GET(_req: Request, context: { params: Promise<{ id: string }> }) {
+  const { id } = await context.params
+  const supa = supabaseServer()
+  const { data: campaign, error: cErr } = await supa.from('campaigns').select('*').eq('id', id).single()
   if (cErr || !campaign) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
 
-  const { data: counts, error: sErr } = await supabaseServer
-    .from('leads')
-    .select('ice_status, count:count(*)')
-    .eq('campaign_id', id)
-    .group('ice_status')
-  if (sErr) return NextResponse.json({ error: sErr.message }, { status: 500 })
-
-  const totals: Record<string, number> = { total: 0 }
-  for (const row of counts || []) {
-    totals[row.ice_status] = (totals[row.ice_status] || 0) + Number(row.count)
-    totals.total += Number(row.count)
+  const totals: Record<string, number> = { total: 0, done: 0, queued: 0, processing: 0, error: 0 }
+  const totalRes = await supa.from('leads').select('id', { count: 'exact', head: true }).eq('campaign_id', id)
+  if (totalRes.error) return NextResponse.json({ error: totalRes.error.message }, { status: 500 })
+  totals.total = totalRes.count ?? 0
+  for (const st of ['done','queued','processing','error'] as const) {
+    const r = await supa.from('leads').select('id', { count: 'exact', head: true }).eq('campaign_id', id).eq('ice_status', st)
+    if (r.error) return NextResponse.json({ error: r.error.message }, { status: 500 })
+    totals[st] = r.count ?? 0
   }
   return NextResponse.json({ campaign, totals })
 }

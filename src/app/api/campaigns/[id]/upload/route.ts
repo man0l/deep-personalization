@@ -5,8 +5,8 @@ import { parse } from 'csv-parse'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-export async function POST(req: NextRequest, { params }: { params: { id: string } }) {
-  const campaignId = params.id
+export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> }) {
+  const { id: campaignId } = await context.params
   const contentType = req.headers.get('content-type') || ''
   if (!contentType.includes('multipart/form-data')) {
     return NextResponse.json({ error: 'Expected multipart/form-data' }, { status: 400 })
@@ -32,7 +32,7 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
     campaign_id: campaignId,
     first_name: r['First Name'] ?? null,
     last_name: r['Last Name'] ?? null,
-    full_name: r['Full Name'] ?? [r['First Name'], r['Last Name']].filter(Boolean).join(' ') || null,
+    full_name: r['Full Name'] ?? (([r['First Name'], r['Last Name']].filter(Boolean).join(' ')) || null),
     company_name: r['Company Name'] ?? null,
     company_website: (r['Company Website'] || r['Company Domain'] || '').replace(/^https?:\/\//, '') || null,
     email: r['Email'] ?? null,
@@ -48,15 +48,16 @@ export async function POST(req: NextRequest, { params }: { params: { id: string 
 
   const chunkSize = 500
   let inserted = 0
+  const supa = supabaseServer()
   for (let i = 0; i < mapped.length; i += chunkSize) {
     const chunk = mapped.slice(i, i + chunkSize)
-    const { error, count } = await supabaseServer
+    const { error, count } = await supa
       .from('leads')
       .insert(chunk, { count: 'exact' })
       .select('id')
     if (error) {
       // try dedupe-aware upsert by email
-      const { error: upsertErr, count: upsertCount } = await supabaseServer
+      const { error: upsertErr, count: upsertCount } = await supa
         .from('leads')
         .upsert(chunk, { onConflict: 'campaign_id,email', ignoreDuplicates: false, count: 'exact' })
         .select('id')

@@ -8,16 +8,21 @@ export async function POST(req: NextRequest) {
 
   const QUEUE_NAME = process.env.QUEUE_NAME || 'lead-enrichment'
 
-  // Insert into enrichment_jobs and enqueue via a simple table insert; the worker will poll/consume.
+  // Enqueue into pgmq via RPC and also record enrichment_jobs for audit/status
+  const supa = supabaseServer()
   let queued = 0
   for (const leadId of leadIds) {
-    const { data: lead, error: leadErr } = await supabaseServer.from('leads').select('id,campaign_id,ice_status').eq('id', leadId).single()
+    const { data: lead, error: leadErr } = await supa.from('leads').select('id,campaign_id,ice_status').eq('id', leadId).single()
     if (leadErr || !lead || lead.ice_status === 'done') continue
-    await supabaseServer.from('leads').update({ ice_status: 'queued' }).eq('id', lead.id)
-    const { error } = await supabaseServer
+    await supa.from('leads').update({ ice_status: 'queued' }).eq('id', lead.id)
+    const { error } = await supa
       .from('enrichment_jobs')
       .insert({ lead_id: lead.id, campaign_id: lead.campaign_id, status: 'queued' })
-    if (!error) queued++
+    if (!error) {
+      // push to pgmq
+      const { error: rpcErr } = await supa.rpc('enqueue_lead_enrichment', { lid: lead.id })
+      if (!rpcErr) queued++
+    }
   }
 
   return NextResponse.json({ queued, queue: QUEUE_NAME })
