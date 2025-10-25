@@ -4,13 +4,14 @@ import { useParams } from 'next/navigation'
 import { ColumnDef, flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Checkbox } from '@/components/ui/checkbox'
+import { SelectionCheckbox, HeaderSelectionCheckbox, selectionStore } from './use-campaign-leads'
 import type { Lead } from './types'
 import { FiltersDialog } from './components/FiltersDialog'
 import { ViewMenu } from './components/ViewMenu'
 import { PurgeQueuedDialog } from './components/PurgeQueuedDialog'
 import { DetailsDialog } from './components/DetailsDialog'
 import { PaginationBar } from './components/PaginationBar'
+import { BulkActionsBar } from './components/BulkActionsBar'
 
  
 
@@ -24,9 +25,7 @@ export default function CampaignDetail() {
   const [pageSize, setPageSize] = useState(50)
   const [q, setQ] = useState('')
   const [hasIce, setHasIce] = useState<'all'|'true'|'false'>('all')
-  const [selected, setSelected] = useState<Record<string, boolean>>({})
-  const selectedRef = useRef<Record<string, boolean>>({})
-  useEffect(()=>{ selectedRef.current = selected }, [selected])
+ 
   const [visibleCols, setVisibleCols] = useState<Record<string, boolean>>(()=>{
     return {
       select: true, full_name: true, title: true, company_name: true, company_website: true, email: true,
@@ -67,7 +66,7 @@ export default function CampaignDetail() {
     } catch {}
   }, [mounted, id])
 
-  async function load() {
+  const load = useCallback(async () => {
     if (loading) return
     setLoading(true)
     const paramsQ = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
@@ -95,16 +94,16 @@ export default function CampaignDetail() {
       setData(json.leads)
       setTotal(json.total)
       if (json.totals) setTotals(json.totals)
-      setSelected({})
+      selectionStore.clear()
     } else if (!res.ok) {
       // best-effort fallback to keep UI responsive
       setData([])
       setTotal(0)
     }
     setLoading(false)
-  }
+  }, [page, pageSize, pollUntil, q, statusFilter, hasIce, filters.full_name, filters.title, filters.company_name, filters.email, sortBy, sortDir, id])
 
-  useEffect(() => { load() }, [page, pageSize, hasIce, statusFilter, q, sortBy, sortDir, filters.full_name, filters.title, filters.company_name, filters.email])
+  useEffect(() => { load() }, [load])
 
   // Kick off a short polling window on mount (~25s)
   useEffect(()=>{
@@ -119,7 +118,7 @@ export default function CampaignDetail() {
       if (Date.now() <= pollUntil) load()
     }, 2000)
     return ()=> clearInterval(h)
-  }, [pollUntil])
+  }, [pollUntil, load])
 
   // Removed selectVisiblePageRows (header checkbox)
   // Removed selectAllFiltered (Select all button)
@@ -134,7 +133,6 @@ export default function CampaignDetail() {
           if (sortBy !== key) { setSortBy(key); setSortDir('asc') }
           else { setSortDir(sortDir === 'asc' ? 'desc' : 'asc') }
           setPage(1)
-          setTimeout(()=>load(), 0)
         }}
       >
         <span>{label}</span>
@@ -146,17 +144,11 @@ export default function CampaignDetail() {
   const columns = useMemo<ColumnDef<Lead>[]>(() => [
     visibleCols.select ? { header: (
       <div className="flex items-center gap-2">
-        <span className="text-xs text-zinc-400">Select</span>
+        <HeaderSelectionCheckbox ids={data.map(l=> l.id)} />
       </div>
     ), id: 'select', cell: ({ row }: any) => {
       const id = row.original.id as string
-      const checked = !!selectedRef.current[id]
-      return (
-        <Checkbox
-          checked={checked}
-          onCheckedChange={(v)=> setSelected(s=> ({ ...s, [id]: Boolean(v) }))}
-        />
-      )
+      return <SelectionCheckbox id={id} />
     } } : undefined,
     visibleCols.full_name ? { header: () => buildSortHeader('Name','full_name'), accessorKey: 'full_name' } : undefined,
     visibleCols.title ? { header: () => buildSortHeader('Title','title'), accessorKey: 'title' } : undefined,
@@ -257,7 +249,7 @@ export default function CampaignDetail() {
         <button className={`hover:text-violet-300 ${statusFilter==='error'?'text-violet-300':''}`} onClick={()=>{ setStatusFilter('error'); setHasIce('all'); setPage(1) }}>Error: {totals.error ?? 0}</button>
       </div>
       <div className="flex items-center gap-4">
-        <Input placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') { setPage(1); load() } }} />
+        <Input placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') { setPage(1) } }} />
         <Button onClick={enrichAllMissing} disabled={enriching} variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">Enrich All Missing (page)</Button>
         <Button
           variant="secondary"
@@ -273,8 +265,8 @@ export default function CampaignDetail() {
           setStatusFilter={(s)=> setStatusFilter(s as any)}
           hasIce={hasIce}
           setHasIce={setHasIce}
-          apply={()=>{ startTransition(()=>{ setPage(1); setFiltersOpen(false) }); load() }}
-          clear={()=>{ startTransition(()=>{ setFilters({ full_name:'', title:'', company_name:'', email:'' }); setHasIce('all'); setStatusFilter(null); setPage(1); setFiltersOpen(false) }); load() }}
+          apply={()=>{ startTransition(()=>{ setPage(1); setFiltersOpen(false) }) }}
+          clear={()=>{ startTransition(()=>{ setFilters({ full_name:'', title:'', company_name:'', email:'' }); setHasIce('all'); setStatusFilter(null); setPage(1); setFiltersOpen(false) }) }}
         />
         <ViewMenu
           density={density}
@@ -298,7 +290,12 @@ export default function CampaignDetail() {
           </select>
         </div>
       </div>
-      {/* Bulk actions removed */}
+      {/* Bulk actions */}
+      <BulkActionsBar
+        visibleIds={useMemo(()=> data.map(l=> l.id), [data])}
+        onAfterAction={() => { setPollUntil(Date.now() + 30000); load() }}
+        hideWhenEmpty
+      />
 
       <div className="overflow-x-auto border border-zinc-800 rounded">
         <table className={`w-full text-sm`} style={{ minWidth: totalWidth }}>
