@@ -5,6 +5,7 @@ import { ColumnDef, flexRender, getCoreRowModel, getSortedRowModel, useReactTabl
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Checkbox } from '@/components/ui/checkbox'
 import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
 
@@ -62,6 +63,7 @@ export default function CampaignDetail() {
   const [loading, setLoading] = useState(false)
   const [pollUntil, setPollUntil] = useState<number>(0)
   const [enriching, setEnriching] = useState(false)
+  const [purging, setPurging] = useState(false)
 
   // After mount, hydrate preferences from localStorage to avoid SSR/client mismatch
   useEffect(()=>{
@@ -248,6 +250,17 @@ export default function CampaignDetail() {
     await enrich(missing)
   }
 
+  async function purgeQueued() {
+    if (purging) return
+    setPurging(true)
+    try {
+      await fetch(`/api/campaigns/${id}`, { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'purge_queued' }) })
+      await load()
+    } finally {
+      setPurging(false)
+    }
+  }
+
   // Views: sticky first N columns + wide table for smooth horizontal scroll
   const colWidths = [40, 220, 230, 300, 240, 260, 260, 180, 160, 170, 120, 160, 180]
   const totalWidth = colWidths.reduce((a,b)=>a+b,0)
@@ -281,16 +294,11 @@ export default function CampaignDetail() {
       </div>
       <div className="flex items-center gap-4">
         <Input placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') { setPage(1); load() } }} />
-        <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" value={hasIce} onChange={(e)=>{ setHasIce(e.target.value as any); setPage(1) }}>
-          <option value="all">All</option>
-          <option value="true">Has Ice</option>
-          <option value="false">No Ice</option>
-        </select>
         <Button onClick={()=>enrich(selectedIds)} disabled={selectedIds.length===0 || enriching} className="bg-violet-600 hover:bg-violet-500">{enriching? 'Enriching…' : 'Enrich Selected'}</Button>
         <Button onClick={enrichAllMissing} disabled={enriching} variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">Enrich All Missing (page)</Button>
         <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
           <DialogTrigger asChild>
-            <Button variant="secondary" className={`bg-zinc-900 border ${ (filters.full_name||filters.title||filters.company_name||filters.email)? 'border-violet-700 text-violet-300':'border-zinc-800'}`}>Filters</Button>
+            <Button variant="secondary" className={`bg-zinc-900 border ${ (filters.full_name||filters.title||filters.company_name||filters.email||statusFilter||hasIce!=='all')? 'border-violet-700 text-violet-300':'border-zinc-800'}`}>Filters</Button>
           </DialogTrigger>
           <DialogContent className="bg-zinc-950 border-zinc-800">
             <DialogHeader>
@@ -314,8 +322,45 @@ export default function CampaignDetail() {
                 <Input value={filters.email} onChange={e=>setFilters({ ...filters, email: e.target.value })} />
               </div>
             </div>
+            <div className="grid grid-cols-2 gap-6 mt-4">
+              <div>
+                <div className="text-xs text-zinc-400 mb-2">Status</div>
+                <div className="flex flex-wrap gap-2">
+                  {[
+                    { k: null as any, label: 'All' },
+                    { k: 'done' as const, label: 'Done' },
+                    { k: 'queued' as const, label: 'Queued' },
+                    { k: 'processing' as const, label: 'Processing' },
+                    { k: 'error' as const, label: 'Error' },
+                  ].map(s=> (
+                    <button
+                      key={String(s.k)}
+                      className={`px-2 py-1 rounded border ${statusFilter===s.k ? 'border-violet-700 bg-violet-700/20 text-violet-300' : 'border-zinc-800 bg-zinc-900 text-zinc-300'}`}
+                      onClick={()=> setStatusFilter(s.k as any)}
+                    >{s.label}</button>
+                  ))}
+                </div>
+              </div>
+              <div>
+                <div className="text-xs text-zinc-400 mb-2">Has ice breaker</div>
+                <div className="flex gap-2">
+                  {[
+                    { v: 'all' as const, label: 'All' },
+                    { v: 'true' as const, label: 'Has' },
+                    { v: 'false' as const, label: 'None' },
+                  ].map(o=> (
+                    <button
+                      key={o.v}
+                      className={`px-2 py-1 rounded border ${hasIce===o.v ? 'border-violet-700 bg-violet-700/20 text-violet-300' : 'border-zinc-800 bg-zinc-900 text-zinc-300'}`}
+                      onClick={()=> setHasIce(o.v)}
+                    >{o.label}</button>
+                  ))}
+                </div>
+                <div className="text-xs text-zinc-500 mt-1">When a status is selected, it overrides this toggle.</div>
+              </div>
+            </div>
             <div className="flex justify-end gap-2 mt-4">
-              <Button variant="secondary" onClick={()=>{ setFilters({ full_name:'', title:'', company_name:'', email:'' }); setPage(1); setFiltersOpen(false); load() }}>Clear</Button>
+              <Button variant="secondary" onClick={()=>{ setFilters({ full_name:'', title:'', company_name:'', email:'' }); setHasIce('all'); setStatusFilter(null); setPage(1); setFiltersOpen(false); load() }}>Clear</Button>
               <Button className="bg-violet-600 hover:bg-violet-500" onClick={()=>{ setPage(1); setFiltersOpen(false); load() }}>Apply</Button>
             </div>
           </DialogContent>
@@ -337,6 +382,23 @@ export default function CampaignDetail() {
             ))}
           </DropdownMenuContent>
         </DropdownMenu>
+        <AlertDialog>
+          <AlertDialogTrigger asChild>
+            <Button variant="secondary" className="bg-zinc-900 border border-zinc-800" disabled={purging}>{purging? 'Purging…' : 'Purge queued'}</Button>
+          </AlertDialogTrigger>
+          <AlertDialogContent className="bg-zinc-950 border-zinc-800">
+            <AlertDialogHeader>
+              <AlertDialogTitle>Remove all queued leads?</AlertDialogTitle>
+              <AlertDialogDescription>
+                This will reset the status of all queued leads to "none" for this campaign.
+              </AlertDialogDescription>
+            </AlertDialogHeader>
+            <AlertDialogFooter>
+              <AlertDialogCancel className="bg-zinc-900 border border-zinc-800">Cancel</AlertDialogCancel>
+              <AlertDialogAction className="bg-violet-600 hover:bg-violet-500" onClick={purgeQueued}>Confirm</AlertDialogAction>
+            </AlertDialogFooter>
+          </AlertDialogContent>
+        </AlertDialog>
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs text-zinc-400">Sort</span>
           <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" value={sortBy} onChange={e=>{ setSortBy(e.target.value as any); setPage(1) }}>
