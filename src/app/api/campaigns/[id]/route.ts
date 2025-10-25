@@ -41,4 +41,17 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
   return NextResponse.json({ updated: 1 })
 }
 
+export async function POST(req: Request, context: { params: Promise<{ id: string }> | { id: string } }) {
+  // Action endpoint: { action: 'purge_queued' }
+  const p: any = await (context.params as any)
+  const id = (p?.id || p?.then ? (await (context.params as Promise<{ id: string }>)).id : p.id)
+  const body = await req.json().catch(()=>({}))
+  if (body?.action !== 'purge_queued') return NextResponse.json({ error: 'unsupported action' }, { status: 400 })
+  const supa = supabaseServer()
+  // Mark queued leads as none
+  const { error } = await supa.from('leads').update({ ice_status: 'none' }).eq('campaign_id', id).eq('ice_status', 'queued')
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ purged: true })
+}
+
 

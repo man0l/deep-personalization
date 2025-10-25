@@ -23,6 +23,7 @@ type Lead = {
   country: string | null
   ice_breaker: string | null
   ice_status: string
+  enriched_at?: string | null
 }
 
 export default function CampaignDetail() {
@@ -54,11 +55,13 @@ export default function CampaignDetail() {
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [detailsLead, setDetailsLead] = useState<Lead | null>(null)
   const [statusDraft, setStatusDraft] = useState<string>('none')
+  const [jobError, setJobError] = useState<string>('')
   const [density, setDensity] = useState<'comfortable'|'compact'>(()=> 'comfortable')
   useEffect(()=>{ try { localStorage.setItem(`view:${id}:density`, density) } catch{} }, [id, density])
   const [statusFilter, setStatusFilter] = useState<'queued'|'processing'|'error'|null>(null)
   const [loading, setLoading] = useState(false)
   const [pollUntil, setPollUntil] = useState<number>(0)
+  const [enriching, setEnriching] = useState(false)
 
   // After mount, hydrate preferences from localStorage to avoid SSR/client mismatch
   useEffect(()=>{
@@ -201,11 +204,15 @@ export default function CampaignDetail() {
     visibleCols.state ? { header: () => buildSortHeader('State','state'), accessorKey: 'state' } : undefined,
     visibleCols.country ? { header: () => buildSortHeader('Country','country'), accessorKey: 'country' } : undefined,
     visibleCols.ice_status ? { header: () => buildSortHeader('Ice','ice_status'), accessorKey: 'ice_status' } : undefined,
+    { header: () => buildSortHeader('Enriched','enriched_at'), accessorKey: 'enriched_at', cell: ({ row }: any) => {
+      const v = row.original.enriched_at
+      return <span className="text-zinc-400">{v ? new Date(v).toLocaleString() : '—'}</span>
+    } },
     visibleCols.actions ? { header: 'Actions', id: 'actions', cell: ({ row }: any) => (
       <div className="flex gap-2">
         <button className="underline" onClick={()=>enrich([row.original.id])}>Enrich</button>
         <button className="underline" onClick={async ()=>{ await fetch(`/api/leads/${row.original.id}`, { method: 'DELETE' }); await load() }}>Delete</button>
-        <button className="underline" onClick={()=>{ setDetailsLead(row.original as Lead); setStatusDraft((row.original as Lead).ice_status); setDetailsOpen(true) }}>Details</button>
+        <button className="underline" onClick={async ()=>{ const lead = row.original as Lead; setDetailsLead(lead); setStatusDraft(lead.ice_status); setDetailsOpen(true); try { const r = await fetch(`/api/leads/${lead.id}/job`); const j = await r.json(); setJobError(j.job?.error || '') } catch { setJobError('') } }}>Details</button>
       </div>
     ) } : undefined,
   ].filter(Boolean) as ColumnDef<Lead>[], [selected, visibleCols, sortBy, sortDir])
@@ -220,10 +227,20 @@ export default function CampaignDetail() {
   const selectedIds = Object.entries(selected).filter(([,v])=>v).map(([k])=>k)
 
   async function enrich(ids: string[]) {
-    if (ids.length === 0) return
-    await fetch('/api/leads/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadIds: ids }) })
-    setPollUntil(Date.now() + 30000)
-    await load()
+    if (ids.length === 0 || enriching) return
+    setEnriching(true)
+    try {
+      const unique = Array.from(new Set(ids))
+      const chunkSize = 50
+      for (let i = 0; i < unique.length; i += chunkSize) {
+        const chunk = unique.slice(i, i + chunkSize)
+        await fetch('/api/leads/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadIds: chunk }) })
+        setPollUntil(Date.now() + 30000)
+      }
+      await load()
+    } finally {
+      setEnriching(false)
+    }
   }
 
   async function enrichAllMissing() {
@@ -232,7 +249,7 @@ export default function CampaignDetail() {
   }
 
   // Views: sticky first N columns + wide table for smooth horizontal scroll
-  const colWidths = [40, 220, 230, 300, 240, 260, 260, 180, 160, 170, 120, 160]
+  const colWidths = [40, 220, 230, 300, 240, 260, 260, 180, 160, 170, 120, 160, 180]
   const totalWidth = colWidths.reduce((a,b)=>a+b,0)
   const [frozenCount, setFrozenCount] = useState<number>(()=> 2)
   useEffect(()=>{ try { localStorage.setItem(`view:${id}:frozenCount`, String(frozenCount)) } catch{} }, [id, frozenCount])
@@ -269,8 +286,8 @@ export default function CampaignDetail() {
           <option value="true">Has Ice</option>
           <option value="false">No Ice</option>
         </select>
-        <Button onClick={()=>enrich(selectedIds)} disabled={selectedIds.length===0} className="bg-violet-600 hover:bg-violet-500">Enrich Selected</Button>
-        <Button onClick={enrichAllMissing} variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">Enrich All Missing (page)</Button>
+        <Button onClick={()=>enrich(selectedIds)} disabled={selectedIds.length===0 || enriching} className="bg-violet-600 hover:bg-violet-500">{enriching? 'Enriching…' : 'Enrich Selected'}</Button>
+        <Button onClick={enrichAllMissing} disabled={enriching} variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">Enrich All Missing (page)</Button>
         <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
           <DialogTrigger asChild>
             <Button variant="secondary" className={`bg-zinc-900 border ${ (filters.full_name||filters.title||filters.company_name||filters.email)? 'border-violet-700 text-violet-300':'border-zinc-800'}`}>Filters</Button>
@@ -409,8 +426,11 @@ export default function CampaignDetail() {
                     setData(d=> d.map(l=> l.id===detailsLead.id? { ...l, ice_status: statusDraft }: l))
                   }}>Save</Button>
                 </div>
-                {detailsLead.ice_status === 'error' && (
-                  <ErrorBlock leadId={detailsLead.id} />
+                {detailsLead.ice_status === 'error' && jobError && (
+                  <div className="mt-3 text-sm">
+                    <div className="text-xs text-red-300 mb-1">Last error</div>
+                    <pre className="bg-zinc-900 border border-red-900/40 text-red-300 rounded p-2 whitespace-pre-wrap break-words">{jobError}</pre>
+                  </div>
                 )}
               </div>
               <div>

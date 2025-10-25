@@ -20,7 +20,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   const f_email = searchParams.get('f_email') || undefined
 
   const supa = supabaseServer()
-  const selectCols = 'id,first_name,last_name,full_name,company_name,company_website,email,personal_email,title,industry,city,state,country,ice_breaker,ice_status,created_at'
+  const selectCols = 'id,first_name,last_name,full_name,company_name,company_website,email,personal_email,title,industry,city,state,country,ice_breaker,ice_status,enriched_at,created_at'
   let query: any
   if (idsOnly) {
     query = supa.from('leads').select('id').eq('campaign_id', campaignId)
