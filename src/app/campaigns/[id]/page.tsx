@@ -1,5 +1,5 @@
 "use client"
-import { useEffect, useMemo, useState } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
 import { useParams } from 'next/navigation'
 import { ColumnDef, flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
@@ -64,6 +64,7 @@ export default function CampaignDetail() {
   const [pollUntil, setPollUntil] = useState<number>(0)
   const [enriching, setEnriching] = useState(false)
   const [purging, setPurging] = useState(false)
+  const [isPending, startTransition] = useTransition()
 
   // After mount, hydrate preferences from localStorage to avoid SSR/client mismatch
   useEffect(()=>{
@@ -133,12 +134,22 @@ export default function CampaignDetail() {
   }, [pollUntil])
 
   async function selectVisiblePageRows(flag: boolean) {
-    const newSel = { ...selected }
-    for (const r of table.getRowModel().rows) {
+    const rows = table.getRowModel().rows
+    const next: Record<string, boolean> = { ...selected }
+    let changed = false
+    for (const r of rows) {
       const id = (r.original as any).id
-      newSel[id] = flag
+      const cur = !!next[id]
+      if (cur !== flag) {
+        changed = true
+        if (flag) next[id] = true
+        else delete next[id]
+      }
     }
-    setSelected(newSel)
+    if (!changed) return
+    requestAnimationFrame(() => {
+      startTransition(() => setSelected(next))
+    })
   }
   async function selectAllFiltered() {
     if (selectAllBusy) return
@@ -164,7 +175,7 @@ export default function CampaignDetail() {
     }
     const newSel: Record<string, boolean> = { ...selected }
     acc.forEach((i)=> newSel[i] = true)
-    setSelected(newSel)
+    startTransition(()=> setSelected(newSel))
     setSelectAllBusy(false)
   }
 
@@ -194,7 +205,7 @@ export default function CampaignDetail() {
         <Button variant="secondary" className="h-6 px-2 bg-zinc-900 border border-zinc-800" onClick={selectAllFiltered} disabled={selectAllBusy}>{selectAllBusy? 'Selecting…' : 'Select all'}</Button>
       </div>
     ), id: 'select', cell: ({ row }: any) => (
-      <input type="checkbox" checked={!!selected[row.original.id]} onChange={e=>setSelected(s=>({ ...s, [row.original.id]: e.target.checked }))} />
+      <input type="checkbox" data-id={row.original.id} checked={!!selected[row.original.id]} onChange={onRowToggle} />
     ) } : undefined,
     visibleCols.full_name ? { header: () => buildSortHeader('Name','full_name'), accessorKey: 'full_name' } : undefined,
     visibleCols.title ? { header: () => buildSortHeader('Title','title'), accessorKey: 'title' } : undefined,
@@ -226,7 +237,35 @@ export default function CampaignDetail() {
     getSortedRowModel: getSortedRowModel(),
   })
 
-  const selectedIds = Object.entries(selected).filter(([,v])=>v).map(([k])=>k)
+  const toggleSelected = useCallback((id: string, checked: boolean) => {
+    startTransition(()=>{
+      setSelected(prev => {
+        const isChecked = !!(prev as Record<string, boolean>)[id]
+        if (isChecked === checked) return prev
+        const next = { ...prev }
+        if (checked) (next as Record<string, boolean>)[id] = true
+        else delete (next as Record<string, boolean>)[id]
+        return next
+      })
+    })
+  }, [])
+
+  const onRowToggle = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
+    const id = (e.currentTarget.dataset.id as string) || ''
+    const checked = e.currentTarget.checked
+    if (!id) return
+    toggleSelected(id, checked)
+  }, [toggleSelected])
+
+  // Keep a ref to selected so cells can read latest state without forcing columns recreation
+  const selectedRef = useRef<Record<string, boolean>>({})
+  useEffect(()=>{ selectedRef.current = selected }, [selected])
+
+  // Fast count for UI; compute full list only when needed
+  const selectedCount = useMemo(()=> Object.keys(selected).length, [selected])
+  const getSelectedIds = useCallback(()=> Object.keys(selectedRef.current), [])
+
+  const selectedIds = useMemo(()=> Object.entries(selected).filter(([,v])=>v).map(([k])=>k), [selected])
 
   async function enrich(ids: string[]) {
     if (ids.length === 0 || enriching) return
@@ -360,8 +399,8 @@ export default function CampaignDetail() {
               </div>
             </div>
             <div className="flex justify-end gap-2 mt-4">
-              <Button variant="secondary" onClick={()=>{ setFilters({ full_name:'', title:'', company_name:'', email:'' }); setHasIce('all'); setStatusFilter(null); setPage(1); setFiltersOpen(false); load() }}>Clear</Button>
-              <Button className="bg-violet-600 hover:bg-violet-500" onClick={()=>{ setPage(1); setFiltersOpen(false); load() }}>Apply</Button>
+              <Button variant="secondary" onClick={()=>{ startTransition(()=>{ setFilters({ full_name:'', title:'', company_name:'', email:'' }); setHasIce('all'); setStatusFilter(null); setPage(1); setFiltersOpen(false) }); load() }}>Clear</Button>
+              <Button className="bg-violet-600 hover:bg-violet-500" onClick={()=>{ startTransition(()=>{ setPage(1); setFiltersOpen(false) }); load() }}>Apply</Button>
             </div>
           </DialogContent>
         </Dialog>
@@ -417,6 +456,41 @@ export default function CampaignDetail() {
       {selectedIds.length>0 && (
         <div className="flex items-center gap-3 text-sm text-zinc-300 bg-zinc-900/60 border border-zinc-800 rounded px-3 py-2">
           <span>{selectedIds.length} selected</span>
+          <Button variant="secondary" className="bg-zinc-800/60" onClick={()=>enrich(selectedIds)} disabled={enriching}>{enriching? 'Enriching…' : 'Enrich selected'}</Button>
+          <div className="flex items-center gap-2">
+            <span className="text-xs text-zinc-400">Set status</span>
+            <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" onChange={async (e)=>{
+              const v = e.target.value
+              if (!v) return
+              await fetch('/api/leads/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status', status: v, ids: selectedIds }) })
+              setSelected({})
+              setPollUntil(Date.now() + 30000)
+              await load()
+              e.currentTarget.value = ''
+            }} defaultValue="">
+              <option value="" disabled>Choose…</option>
+              {['none','queued','processing','done','error'].map(s=> <option key={s} value={s}>{s}</option>)}
+            </select>
+          </div>
+          <AlertDialog>
+            <AlertDialogTrigger asChild>
+              <Button variant="destructive">Delete selected</Button>
+            </AlertDialogTrigger>
+            <AlertDialogContent className="bg-zinc-950 border-zinc-800">
+              <AlertDialogHeader>
+                <AlertDialogTitle>Delete {selectedIds.length} leads?</AlertDialogTitle>
+                <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
+              </AlertDialogHeader>
+              <AlertDialogFooter>
+                <AlertDialogCancel className="bg-zinc-900 border border-zinc-800">Cancel</AlertDialogCancel>
+                <AlertDialogAction className="bg-red-600 hover:bg-red-500" onClick={async ()=>{
+                  await fetch('/api/leads/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', ids: selectedIds }) })
+                  setSelected({})
+                  await load()
+                }}>Delete</AlertDialogAction>
+              </AlertDialogFooter>
+            </AlertDialogContent>
+          </AlertDialog>
           <Button variant="secondary" className="bg-zinc-800/60" onClick={()=>setSelected({})}>Clear</Button>
         </div>
       )}
