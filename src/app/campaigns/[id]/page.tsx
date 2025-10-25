@@ -57,6 +57,8 @@ export default function CampaignDetail() {
   const [density, setDensity] = useState<'comfortable'|'compact'>(()=> 'comfortable')
   useEffect(()=>{ try { localStorage.setItem(`view:${id}:density`, density) } catch{} }, [id, density])
   const [statusFilter, setStatusFilter] = useState<'queued'|'processing'|'error'|null>(null)
+  const [loading, setLoading] = useState(false)
+  const [pollUntil, setPollUntil] = useState<number>(0)
 
   // After mount, hydrate preferences from localStorage to avoid SSR/client mismatch
   useEffect(()=>{
@@ -72,11 +74,11 @@ export default function CampaignDetail() {
   }, [mounted, id])
 
   async function load() {
-    // stats
-    const statsRes = await fetch(`/api/campaigns/${id}`, { cache: 'no-store' })
-    const stats = await statsRes.json()
-    if (statsRes.ok) setTotals(stats.totals || {})
+    if (loading) return
+    setLoading(true)
     const paramsQ = new URLSearchParams({ page: String(page), pageSize: String(pageSize) })
+    const shouldIncludeTotals = Date.now() > pollUntil
+    if (shouldIncludeTotals) paramsQ.set('includeTotals', '1')
     if (q) paramsQ.set('q', q)
     if (statusFilter) {
       paramsQ.set('status', statusFilter)
@@ -90,15 +92,40 @@ export default function CampaignDetail() {
     if (sortBy) paramsQ.set('sortBy', sortBy)
     if (sortDir) paramsQ.set('sortDir', sortDir)
     const res = await fetch(`/api/campaigns/${id}/leads?` + paramsQ.toString(), { cache: 'no-store' })
-    const json = await res.json()
-    if (res.ok) {
+    let json: any = null
+    try {
+      const txt = await res.text()
+      json = txt ? JSON.parse(txt) : null
+    } catch {}
+    if (res.ok && json) {
       setData(json.leads)
       setTotal(json.total)
+      if (json.totals) setTotals(json.totals)
       setSelected({})
+    } else if (!res.ok) {
+      // best-effort fallback to keep UI responsive
+      setData([])
+      setTotal(0)
     }
+    setLoading(false)
   }
 
   useEffect(() => { load() }, [page, pageSize, hasIce, statusFilter, q, sortBy, sortDir, filters.full_name, filters.title, filters.company_name, filters.email])
+
+  // Kick off a short polling window on mount (~25s)
+  useEffect(()=>{
+    if (!mounted) return
+    setPollUntil(Date.now() + 25000)
+  }, [mounted])
+
+  // Poll while within the window
+  useEffect(()=>{
+    if (pollUntil <= Date.now()) return
+    const h = setInterval(()=>{
+      if (Date.now() <= pollUntil) load()
+    }, 2000)
+    return ()=> clearInterval(h)
+  }, [pollUntil])
 
   async function selectVisiblePageRows(flag: boolean) {
     const newSel = { ...selected }
@@ -195,6 +222,7 @@ export default function CampaignDetail() {
   async function enrich(ids: string[]) {
     if (ids.length === 0) return
     await fetch('/api/leads/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadIds: ids }) })
+    setPollUntil(Date.now() + 30000)
     await load()
   }
 
