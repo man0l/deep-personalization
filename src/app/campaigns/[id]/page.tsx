@@ -4,28 +4,15 @@ import { useParams } from 'next/navigation'
 import { ColumnDef, flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogTrigger } from '@/components/ui/dialog'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 import { Checkbox } from '@/components/ui/checkbox'
-import { DropdownMenu, DropdownMenuCheckboxItem, DropdownMenuContent, DropdownMenuLabel, DropdownMenuSeparator, DropdownMenuTrigger } from '@/components/ui/dropdown-menu'
+import type { Lead } from './types'
+import { FiltersDialog } from './components/FiltersDialog'
+import { ViewMenu } from './components/ViewMenu'
+import { PurgeQueuedDialog } from './components/PurgeQueuedDialog'
+import { DetailsDialog } from './components/DetailsDialog'
+import { PaginationBar } from './components/PaginationBar'
 
-type Lead = {
-  id: string
-  first_name: string | null
-  last_name: string | null
-  full_name: string | null
-  company_name: string | null
-  company_website: string | null
-  email: string | null
-  title: string | null
-  industry: string | null
-  city: string | null
-  state: string | null
-  country: string | null
-  ice_breaker: string | null
-  ice_status: string
-  enriched_at?: string | null
-}
+ 
 
 export default function CampaignDetail() {
   const params = useParams<{ id: string }>()
@@ -38,6 +25,8 @@ export default function CampaignDetail() {
   const [q, setQ] = useState('')
   const [hasIce, setHasIce] = useState<'all'|'true'|'false'>('all')
   const [selected, setSelected] = useState<Record<string, boolean>>({})
+  const selectedRef = useRef<Record<string, boolean>>({})
+  useEffect(()=>{ selectedRef.current = selected }, [selected])
   const [visibleCols, setVisibleCols] = useState<Record<string, boolean>>(()=>{
     return {
       select: true, full_name: true, title: true, company_name: true, company_website: true, email: true,
@@ -49,14 +38,13 @@ export default function CampaignDetail() {
   const [filters, setFilters] = useState({ full_name: '', title: '', company_name: '', email: '' })
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
-  const [selectAllBusy, setSelectAllBusy] = useState(false)
+  // Removed header-level select-all controls; keep only per-row selection
   const [mounted, setMounted] = useState(false)
   useEffect(()=>{ setMounted(true) }, [])
 
   const [detailsOpen, setDetailsOpen] = useState(false)
   const [detailsLead, setDetailsLead] = useState<Lead | null>(null)
   const [statusDraft, setStatusDraft] = useState<string>('none')
-  const [jobError, setJobError] = useState<string>('')
   const [density, setDensity] = useState<'comfortable'|'compact'>(()=> 'comfortable')
   useEffect(()=>{ try { localStorage.setItem(`view:${id}:density`, density) } catch{} }, [id, density])
   const [statusFilter, setStatusFilter] = useState<'queued'|'processing'|'error'|null>(null)
@@ -133,51 +121,8 @@ export default function CampaignDetail() {
     return ()=> clearInterval(h)
   }, [pollUntil])
 
-  async function selectVisiblePageRows(flag: boolean) {
-    const rows = table.getRowModel().rows
-    const next: Record<string, boolean> = { ...selected }
-    let changed = false
-    for (const r of rows) {
-      const id = (r.original as any).id
-      const cur = !!next[id]
-      if (cur !== flag) {
-        changed = true
-        if (flag) next[id] = true
-        else delete next[id]
-      }
-    }
-    if (!changed) return
-    requestAnimationFrame(() => {
-      startTransition(() => setSelected(next))
-    })
-  }
-  async function selectAllFiltered() {
-    if (selectAllBusy) return
-    setSelectAllBusy(true)
-    const paramsQ = new URLSearchParams({ page: '1', pageSize: '200', idsOnly: 'true' })
-    if (q) paramsQ.set('q', q)
-    if (hasIce !== 'all') paramsQ.set('hasIce', hasIce)
-    if (filters.full_name) paramsQ.set('f_full_name', filters.full_name)
-    if (filters.title) paramsQ.set('f_title', filters.title)
-    if (filters.company_name) paramsQ.set('f_company_name', filters.company_name)
-    if (filters.email) paramsQ.set('f_email', filters.email)
-    // fetch ids in chunks of 200 until exhaustion
-    const acc: string[] = []
-    let pageIdx = 1
-    while (true) {
-      paramsQ.set('page', String(pageIdx))
-      const res = await fetch(`/api/campaigns/${id}/leads?` + paramsQ.toString(), { cache: 'no-store' })
-      const json = await res.json()
-      if (!res.ok) break
-      acc.push(...(json.ids || []))
-      if (!json.ids || json.ids.length < 200) break
-      pageIdx += 1
-    }
-    const newSel: Record<string, boolean> = { ...selected }
-    acc.forEach((i)=> newSel[i] = true)
-    startTransition(()=> setSelected(newSel))
-    setSelectAllBusy(false)
-  }
+  // Removed selectVisiblePageRows (header checkbox)
+  // Removed selectAllFiltered (Select all button)
 
   function buildSortHeader(label: string, key: string) {
     const active = sortBy === key
@@ -201,12 +146,18 @@ export default function CampaignDetail() {
   const columns = useMemo<ColumnDef<Lead>[]>(() => [
     visibleCols.select ? { header: (
       <div className="flex items-center gap-2">
-        <input type="checkbox" onChange={(e)=> selectVisiblePageRows(e.target.checked)} />
-        <Button variant="secondary" className="h-6 px-2 bg-zinc-900 border border-zinc-800" onClick={selectAllFiltered} disabled={selectAllBusy}>{selectAllBusy? 'Selecting…' : 'Select all'}</Button>
+        <span className="text-xs text-zinc-400">Select</span>
       </div>
-    ), id: 'select', cell: ({ row }: any) => (
-      <input type="checkbox" data-id={row.original.id} checked={!!selected[row.original.id]} onChange={onRowToggle} />
-    ) } : undefined,
+    ), id: 'select', cell: ({ row }: any) => {
+      const id = row.original.id as string
+      const checked = !!selectedRef.current[id]
+      return (
+        <Checkbox
+          checked={checked}
+          onCheckedChange={(v)=> setSelected(s=> ({ ...s, [id]: Boolean(v) }))}
+        />
+      )
+    } } : undefined,
     visibleCols.full_name ? { header: () => buildSortHeader('Name','full_name'), accessorKey: 'full_name' } : undefined,
     visibleCols.title ? { header: () => buildSortHeader('Title','title'), accessorKey: 'title' } : undefined,
     visibleCols.company_name ? { header: () => buildSortHeader('Company','company_name'), accessorKey: 'company_name' } : undefined,
@@ -223,12 +174,10 @@ export default function CampaignDetail() {
     } },
     visibleCols.actions ? { header: 'Actions', id: 'actions', cell: ({ row }: any) => (
       <div className="flex gap-2">
-        <button className="underline" onClick={()=>enrich([row.original.id])}>Enrich</button>
-        <button className="underline" onClick={async ()=>{ await fetch(`/api/leads/${row.original.id}`, { method: 'DELETE' }); await load() }}>Delete</button>
-        <button className="underline" onClick={async ()=>{ const lead = row.original as Lead; setDetailsLead(lead); setStatusDraft(lead.ice_status); setDetailsOpen(true); try { const r = await fetch(`/api/leads/${lead.id}/job`); const j = await r.json(); setJobError(j.job?.error || '') } catch { setJobError('') } }}>Details</button>
+        <button className="underline" onClick={async ()=>{ const lead = row.original as Lead; setDetailsLead(lead); setStatusDraft(lead.ice_status); setDetailsOpen(true) }}>Details</button>
       </div>
     ) } : undefined,
-  ].filter(Boolean) as ColumnDef<Lead>[], [selected, visibleCols, sortBy, sortDir])
+  ].filter(Boolean) as ColumnDef<Lead>[], [visibleCols, sortBy, sortDir])
 
   const table = useReactTable({
     data,
@@ -237,35 +186,11 @@ export default function CampaignDetail() {
     getSortedRowModel: getSortedRowModel(),
   })
 
-  const toggleSelected = useCallback((id: string, checked: boolean) => {
-    startTransition(()=>{
-      setSelected(prev => {
-        const isChecked = !!(prev as Record<string, boolean>)[id]
-        if (isChecked === checked) return prev
-        const next = { ...prev }
-        if (checked) (next as Record<string, boolean>)[id] = true
-        else delete (next as Record<string, boolean>)[id]
-        return next
-      })
-    })
-  }, [])
+  // Selection logic removed
 
-  const onRowToggle = useCallback((e: React.ChangeEvent<HTMLInputElement>) => {
-    const id = (e.currentTarget.dataset.id as string) || ''
-    const checked = e.currentTarget.checked
-    if (!id) return
-    toggleSelected(id, checked)
-  }, [toggleSelected])
+  // Per-checkbox external store removed for simplicity
 
-  // Keep a ref to selected so cells can read latest state without forcing columns recreation
-  const selectedRef = useRef<Record<string, boolean>>({})
-  useEffect(()=>{ selectedRef.current = selected }, [selected])
-
-  // Fast count for UI; compute full list only when needed
-  const selectedCount = useMemo(()=> Object.keys(selected).length, [selected])
-  const getSelectedIds = useCallback(()=> Object.keys(selectedRef.current), [])
-
-  const selectedIds = useMemo(()=> Object.entries(selected).filter(([,v])=>v).map(([k])=>k), [selected])
+  // selectedIds replaced with selectedCount + getSelectedIds for cheaper renders
 
   async function enrich(ids: string[]) {
     if (ids.length === 0 || enriching) return
@@ -333,111 +258,31 @@ export default function CampaignDetail() {
       </div>
       <div className="flex items-center gap-4">
         <Input placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') { setPage(1); load() } }} />
-        <Button onClick={()=>enrich(selectedIds)} disabled={selectedIds.length===0 || enriching} className="bg-violet-600 hover:bg-violet-500">{enriching? 'Enriching…' : 'Enrich Selected'}</Button>
         <Button onClick={enrichAllMissing} disabled={enriching} variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">Enrich All Missing (page)</Button>
-        <Dialog open={filtersOpen} onOpenChange={setFiltersOpen}>
-          <DialogTrigger asChild>
-            <Button variant="secondary" className={`bg-zinc-900 border ${ (filters.full_name||filters.title||filters.company_name||filters.email||statusFilter||hasIce!=='all')? 'border-violet-700 text-violet-300':'border-zinc-800'}`}>Filters</Button>
-          </DialogTrigger>
-          <DialogContent className="bg-zinc-950 border-zinc-800">
-            <DialogHeader>
-              <DialogTitle>Filters</DialogTitle>
-            </DialogHeader>
-            <div className="grid grid-cols-2 gap-4">
-              <div>
-                <label className="text-xs text-zinc-400">Name</label>
-                <Input value={filters.full_name} onChange={e=>setFilters({ ...filters, full_name: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-xs text-zinc-400">Title</label>
-                <Input value={filters.title} onChange={e=>setFilters({ ...filters, title: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-xs text-zinc-400">Company</label>
-                <Input value={filters.company_name} onChange={e=>setFilters({ ...filters, company_name: e.target.value })} />
-              </div>
-              <div>
-                <label className="text-xs text-zinc-400">Email</label>
-                <Input value={filters.email} onChange={e=>setFilters({ ...filters, email: e.target.value })} />
-              </div>
-            </div>
-            <div className="grid grid-cols-2 gap-6 mt-4">
-              <div>
-                <div className="text-xs text-zinc-400 mb-2">Status</div>
-                <div className="flex flex-wrap gap-2">
-                  {[
-                    { k: null as any, label: 'All' },
-                    { k: 'done' as const, label: 'Done' },
-                    { k: 'queued' as const, label: 'Queued' },
-                    { k: 'processing' as const, label: 'Processing' },
-                    { k: 'error' as const, label: 'Error' },
-                  ].map(s=> (
-                    <button
-                      key={String(s.k)}
-                      className={`px-2 py-1 rounded border ${statusFilter===s.k ? 'border-violet-700 bg-violet-700/20 text-violet-300' : 'border-zinc-800 bg-zinc-900 text-zinc-300'}`}
-                      onClick={()=> setStatusFilter(s.k as any)}
-                    >{s.label}</button>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <div className="text-xs text-zinc-400 mb-2">Has ice breaker</div>
-                <div className="flex gap-2">
-                  {[
-                    { v: 'all' as const, label: 'All' },
-                    { v: 'true' as const, label: 'Has' },
-                    { v: 'false' as const, label: 'None' },
-                  ].map(o=> (
-                    <button
-                      key={o.v}
-                      className={`px-2 py-1 rounded border ${hasIce===o.v ? 'border-violet-700 bg-violet-700/20 text-violet-300' : 'border-zinc-800 bg-zinc-900 text-zinc-300'}`}
-                      onClick={()=> setHasIce(o.v)}
-                    >{o.label}</button>
-                  ))}
-                </div>
-                <div className="text-xs text-zinc-500 mt-1">When a status is selected, it overrides this toggle.</div>
-              </div>
-            </div>
-            <div className="flex justify-end gap-2 mt-4">
-              <Button variant="secondary" onClick={()=>{ startTransition(()=>{ setFilters({ full_name:'', title:'', company_name:'', email:'' }); setHasIce('all'); setStatusFilter(null); setPage(1); setFiltersOpen(false) }); load() }}>Clear</Button>
-              <Button className="bg-violet-600 hover:bg-violet-500" onClick={()=>{ startTransition(()=>{ setPage(1); setFiltersOpen(false) }); load() }}>Apply</Button>
-            </div>
-          </DialogContent>
-        </Dialog>
-        <DropdownMenu>
-          <DropdownMenuTrigger asChild>
-            <Button variant="secondary" className="bg-zinc-900 border border-zinc-800">View</Button>
-          </DropdownMenuTrigger>
-          <DropdownMenuContent align="end" className="bg-zinc-950 border-zinc-800">
-            <DropdownMenuLabel>Density</DropdownMenuLabel>
-            <DropdownMenuCheckboxItem checked={density==='comfortable'} onCheckedChange={()=>setDensity('comfortable')}>Comfortable</DropdownMenuCheckboxItem>
-            <DropdownMenuCheckboxItem checked={density==='compact'} onCheckedChange={()=>setDensity('compact')}>Compact</DropdownMenuCheckboxItem>
-            <DropdownMenuSeparator />
-            <DropdownMenuLabel>Columns</DropdownMenuLabel>
-            {['full_name','title','company_name','company_website','email','industry','city','state','country','ice_status'].map(k=> (
-              <DropdownMenuCheckboxItem key={k} checked={!!visibleCols[k]} onCheckedChange={(v)=> setVisibleCols(c=> ({ ...c, [k]: Boolean(v) }))}>
-                {k.replace('_',' ')}
-              </DropdownMenuCheckboxItem>
-            ))}
-          </DropdownMenuContent>
-        </DropdownMenu>
-        <AlertDialog>
-          <AlertDialogTrigger asChild>
-            <Button variant="secondary" className="bg-zinc-900 border border-zinc-800" disabled={purging}>{purging? 'Purging…' : 'Purge queued'}</Button>
-          </AlertDialogTrigger>
-          <AlertDialogContent className="bg-zinc-950 border-zinc-800">
-            <AlertDialogHeader>
-              <AlertDialogTitle>Remove all queued leads?</AlertDialogTitle>
-              <AlertDialogDescription>
-                This will reset the status of all queued leads to "none" for this campaign.
-              </AlertDialogDescription>
-            </AlertDialogHeader>
-            <AlertDialogFooter>
-              <AlertDialogCancel className="bg-zinc-900 border border-zinc-800">Cancel</AlertDialogCancel>
-              <AlertDialogAction className="bg-violet-600 hover:bg-violet-500" onClick={purgeQueued}>Confirm</AlertDialogAction>
-            </AlertDialogFooter>
-          </AlertDialogContent>
-        </AlertDialog>
+        <Button
+          variant="secondary"
+          className={`bg-zinc-900 border ${ (filters.full_name||filters.title||filters.company_name||filters.email||statusFilter||hasIce!=='all')? 'border-violet-700 text-violet-300':'border-zinc-800'}`}
+          onClick={()=> setFiltersOpen(true)}
+        >Filters</Button>
+        <FiltersDialog
+          open={filtersOpen}
+          onOpenChange={setFiltersOpen}
+          filters={filters}
+          setFilters={(f)=> setFilters(f)}
+          statusFilter={statusFilter as any}
+          setStatusFilter={(s)=> setStatusFilter(s as any)}
+          hasIce={hasIce}
+          setHasIce={setHasIce}
+          apply={()=>{ startTransition(()=>{ setPage(1); setFiltersOpen(false) }); load() }}
+          clear={()=>{ startTransition(()=>{ setFilters({ full_name:'', title:'', company_name:'', email:'' }); setHasIce('all'); setStatusFilter(null); setPage(1); setFiltersOpen(false) }); load() }}
+        />
+        <ViewMenu
+          density={density}
+          setDensity={setDensity}
+          visibleCols={visibleCols}
+          setVisibleCols={(u)=> setVisibleCols(u)}
+        />
+        <PurgeQueuedDialog onConfirm={purgeQueued} disabled={purging} />
         <div className="ml-auto flex items-center gap-2">
           <span className="text-xs text-zinc-400">Sort</span>
           <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" value={sortBy} onChange={e=>{ setSortBy(e.target.value as any); setPage(1) }}>
@@ -453,47 +298,7 @@ export default function CampaignDetail() {
           </select>
         </div>
       </div>
-      {selectedIds.length>0 && (
-        <div className="flex items-center gap-3 text-sm text-zinc-300 bg-zinc-900/60 border border-zinc-800 rounded px-3 py-2">
-          <span>{selectedIds.length} selected</span>
-          <Button variant="secondary" className="bg-zinc-800/60" onClick={()=>enrich(selectedIds)} disabled={enriching}>{enriching? 'Enriching…' : 'Enrich selected'}</Button>
-          <div className="flex items-center gap-2">
-            <span className="text-xs text-zinc-400">Set status</span>
-            <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" onChange={async (e)=>{
-              const v = e.target.value
-              if (!v) return
-              await fetch('/api/leads/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'status', status: v, ids: selectedIds }) })
-              setSelected({})
-              setPollUntil(Date.now() + 30000)
-              await load()
-              e.currentTarget.value = ''
-            }} defaultValue="">
-              <option value="" disabled>Choose…</option>
-              {['none','queued','processing','done','error'].map(s=> <option key={s} value={s}>{s}</option>)}
-            </select>
-          </div>
-          <AlertDialog>
-            <AlertDialogTrigger asChild>
-              <Button variant="destructive">Delete selected</Button>
-            </AlertDialogTrigger>
-            <AlertDialogContent className="bg-zinc-950 border-zinc-800">
-              <AlertDialogHeader>
-                <AlertDialogTitle>Delete {selectedIds.length} leads?</AlertDialogTitle>
-                <AlertDialogDescription>This action cannot be undone.</AlertDialogDescription>
-              </AlertDialogHeader>
-              <AlertDialogFooter>
-                <AlertDialogCancel className="bg-zinc-900 border border-zinc-800">Cancel</AlertDialogCancel>
-                <AlertDialogAction className="bg-red-600 hover:bg-red-500" onClick={async ()=>{
-                  await fetch('/api/leads/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'delete', ids: selectedIds }) })
-                  setSelected({})
-                  await load()
-                }}>Delete</AlertDialogAction>
-              </AlertDialogFooter>
-            </AlertDialogContent>
-          </AlertDialog>
-          <Button variant="secondary" className="bg-zinc-800/60" onClick={()=>setSelected({})}>Clear</Button>
-        </div>
-      )}
+      {/* Bulk actions removed */}
 
       <div className="overflow-x-auto border border-zinc-800 rounded">
         <table className={`w-full text-sm`} style={{ minWidth: totalWidth }}>
@@ -539,87 +344,28 @@ export default function CampaignDetail() {
       </div>
 
       {/* Details Dialog */}
-      <Dialog open={detailsOpen} onOpenChange={setDetailsOpen}>
-        <DialogContent className="bg-zinc-950 border-zinc-800 max-w-3xl">
-          <DialogHeader>
-            <DialogTitle>Lead details</DialogTitle>
-          </DialogHeader>
-          {detailsLead && (
-            <div className="space-y-4">
-              <div className="text-sm text-zinc-300">
-                <div className="font-medium text-white">{detailsLead.full_name || '(No name)'} • {detailsLead.company_name || ''}</div>
-                <div className="text-xs text-zinc-500">{detailsLead.email || ''}</div>
-              </div>
-              <div>
-                <label className="text-xs text-zinc-400">Status</label>
-                <div className="mt-1">
-                  <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" value={statusDraft} onChange={(e)=>setStatusDraft(e.target.value)}>
-                    {['none','queued','processing','done','error'].map(s=> <option key={s} value={s}>{s}</option>)}
-                  </select>
-                  <Button className="ml-2 bg-violet-600 hover:bg-violet-500" onClick={async ()=>{
-                    if (!detailsLead) return
-                    await fetch(`/api/leads/${detailsLead.id}`, { method: 'PATCH', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ice_status: statusDraft }) })
-                    setData(d=> d.map(l=> l.id===detailsLead.id? { ...l, ice_status: statusDraft }: l))
-                  }}>Save</Button>
-                </div>
-                {detailsLead.ice_status === 'error' && jobError && (
-                  <div className="mt-3 text-sm">
-                    <div className="text-xs text-red-300 mb-1">Last error</div>
-                    <pre className="bg-zinc-900 border border-red-900/40 text-red-300 rounded p-2 whitespace-pre-wrap break-words">{jobError}</pre>
-                  </div>
-                )}
-              </div>
-              <div>
-                <label className="text-xs text-zinc-400">Ice breaker</label>
-                <pre className="mt-1 max-h-96 overflow-auto whitespace-pre-wrap break-words bg-zinc-900 border border-zinc-800 rounded p-3 text-zinc-200">{detailsLead.ice_breaker || '—'}</pre>
-              </div>
-            </div>
-          )}
-        </DialogContent>
-      </Dialog>
+      <DetailsDialog
+        open={detailsOpen}
+        onOpenChange={setDetailsOpen}
+        lead={detailsLead}
+        statusDraft={statusDraft}
+        setStatusDraft={setStatusDraft}
+        onSaved={(leadId, newStatus)=> setData(d=> d.map(l=> l.id===leadId? { ...l, ice_status: newStatus }: l))}
+      />
 
-      <div className="flex items-center gap-3 sticky bottom-0 z-30 bg-zinc-950 border-t border-zinc-800 py-2">
-        <Button variant="secondary" className="bg-zinc-900 border border-zinc-800" onClick={()=>setPage(p=>Math.max(1,p-1))} disabled={page===1}>Prev</Button>
-        <span>Page {page}</span>
-        <Button variant="secondary" className="bg-zinc-900 border border-zinc-800" onClick={()=>{
-          if (page*pageSize < total) setPage(p=>p+1)
-        }} disabled={page*pageSize>=total}>Next</Button>
-        <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" value={pageSize} onChange={(e)=>{ const v = Number(e.target.value); setPageSize(v); setPage(1); setTimeout(()=>load(), 0) }}>
-          {[25,50,100,200].map(n=> <option key={n} value={n}>{n}/page</option>)}
-        </select>
-        <span className="text-sm text-zinc-400">Total: {total}</span>
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-zinc-400">Freeze first</span>
-          <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" value={frozenCount} onChange={(e)=>setFrozenCount(Number(e.target.value))}>
-            {[0,1,2,3,4,5,6,7,8].map(n=> <option key={n} value={n}>{n}</option>)}
-          </select>
-          <span className="text-xs text-zinc-400">columns</span>
-        </div>
-      </div>
+      <PaginationBar
+        page={page}
+        setPage={setPage as any}
+        pageSize={pageSize}
+        setPageSize={(n)=> setPageSize(n)}
+        total={total}
+        frozenCount={frozenCount}
+        setFrozenCount={setFrozenCount}
+      />
     </main>
   )
 }
 
-function ErrorBlock({ leadId }: { leadId: string }) {
-  const [msg, setMsg] = useState<string>('')
-  useEffect(()=>{
-    let cancelled = false
-    ;(async()=>{
-      try {
-        const res = await fetch(`/api/leads/${leadId}/job`)
-        const j = await res.json()
-        if (!cancelled && res.ok) setMsg(j.job?.error || '')
-      } catch {}
-    })()
-    return ()=>{ cancelled = true }
-  }, [leadId])
-  if (!msg) return null
-  return (
-    <div className="mt-3 text-sm">
-      <div className="text-xs text-red-300 mb-1">Last error</div>
-      <pre className="bg-zinc-900 border border-red-900/40 text-red-300 rounded p-2 whitespace-pre-wrap break-words">{msg}</pre>
-    </div>
-  )
-}
+ 
 
 
