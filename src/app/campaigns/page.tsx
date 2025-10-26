@@ -4,7 +4,7 @@ import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { supabaseServer } from '@/lib/supabase/server'
 import { DuplicateCampaignButton } from './DuplicateCampaignButton'
-import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
+import { DeleteCampaignButton } from './DeleteCampaignButton'
 
 export default async function CampaignsHome() {
   // Query directly from the server to avoid relative fetch issues
@@ -58,33 +58,7 @@ export default async function CampaignsHome() {
                   <Link href={`/campaigns/${c.id}/edit`}>Edit</Link>
                 </Button>
                 <DuplicateCampaignButton id={c.id} />
-                <AlertDialog>
-                  <AlertDialogTrigger asChild>
-                    <Button variant="destructive">Delete</Button>
-                  </AlertDialogTrigger>
-                  <AlertDialogContent>
-                    <AlertDialogHeader>
-                      <AlertDialogTitle>Delete campaign?</AlertDialogTitle>
-                      <AlertDialogDescription>
-                        This will permanently delete this campaign and all related leads. This action cannot be undone.
-                      </AlertDialogDescription>
-                    </AlertDialogHeader>
-                    <AlertDialogFooter>
-                      <AlertDialogCancel>Cancel</AlertDialogCancel>
-                      <AlertDialogAction
-                        className="bg-red-600 hover:bg-red-500"
-                        asChild
-                      >
-                        <form action={async ()=>{
-                          'use server'
-                          await fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/api/campaigns/${c.id}`, { method: 'DELETE' }).catch(()=>{})
-                        }}>
-                          <button type="submit">Delete</button>
-                        </form>
-                      </AlertDialogAction>
-                    </AlertDialogFooter>
-                  </AlertDialogContent>
-                </AlertDialog>
+                <DeleteCampaignButton id={c.id} name={c.name} />
                 <Button asChild variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">
                   <Link href={`/campaigns/${c.id}`}>Open</Link>
                 </Button>
