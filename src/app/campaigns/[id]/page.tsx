@@ -256,6 +256,8 @@ export default function CampaignDetail() {
     try { const v = localStorage.getItem(`view:${id}:frozenCount`); if (v) setFrozenCount(Number(v)) } catch {}
   }, [mounted, id])
   const leftOf = (i:number) => colWidths.slice(0,i).reduce((a,b)=>a+b,0)
+  // Scroll container ref to sync horizontal scroll with footer proxy scrollbar
+  const tableScrollRef = useRef<HTMLDivElement | null>(null)
 
   return (
     <main className="space-y-4">
@@ -297,7 +299,7 @@ export default function CampaignDetail() {
         hideWhenEmpty
       />
 
-      <div className="overflow-x-auto border border-zinc-800 rounded">
+      <div ref={tableScrollRef} className="overflow-x-auto hide-x-scrollbar border border-zinc-800 rounded">
         <table className={`w-full text-sm`} style={{ minWidth: totalWidth }}>
           <thead>
             {table.getHeaderGroups().map(hg=> (
@@ -358,6 +360,7 @@ export default function CampaignDetail() {
         total={total}
         frozenCount={frozenCount}
         setFrozenCount={setFrozenCount}
+        scrollTargetRef={tableScrollRef}
       />
     </main>
   )

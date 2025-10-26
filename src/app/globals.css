@@ -120,3 +120,12 @@
     @apply bg-background text-foreground;
   }
 }
+
+/* Hide horizontal scrollbar but keep scrolling enabled (used with proxy footer scrollbar) */
+.hide-x-scrollbar {
+  -ms-overflow-style: none; /* IE and Edge */
+  scrollbar-width: none; /* Firefox */
+}
+.hide-x-scrollbar::-webkit-scrollbar {
+  height: 0px; /* Chrome, Safari */
+}
