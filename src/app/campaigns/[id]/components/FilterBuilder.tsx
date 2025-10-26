@@ -6,6 +6,7 @@ import { DropdownMenu, DropdownMenuContent, DropdownMenuItem, DropdownMenuTrigge
 export type FilterSpec =
   | { field: 'status', op: 'any'|'none', values: string[] }
   | { field: 'full_name'|'title'|'company_name'|'email', op: 'contains', value: string }
+  | { field: 'company_website', op: 'like'|'empty'|'not_empty', value?: string }
 
 export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChange: (v: FilterSpec[]) => void }) {
   const hasField = (f: FilterSpec['field']) => value.some(v => v.field === f)
@@ -14,7 +15,9 @@ export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChan
     if (hasField(f)) return
     const next: FilterSpec = f === 'status'
       ? { field: 'status', op: 'any', values: [] }
-      : { field: f as any, op: 'contains', value: '' }
+      : f === 'company_website'
+        ? { field: 'company_website', op: 'like', value: '' }
+        : { field: f as any, op: 'contains', value: '' }
     onChange([...value, next])
   }
 
@@ -27,11 +30,12 @@ export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChan
   }
 
   const statusSpec = value.find(v => v.field === 'status') as Extract<FilterSpec,{field:'status'}> | undefined
-  const textSpecs = value.filter(v => v.field !== 'status') as Extract<FilterSpec,{op:'contains'}>[]
+  const websiteSpec = value.find(v => v.field === 'company_website') as Extract<FilterSpec,{field:'company_website'}> | undefined
+  const textSpecs = value.filter(v => v.field !== 'status' && v.field !== 'company_website') as Extract<FilterSpec,{op:'contains'}>[]
 
   const availableFields: FilterSpec['field'][] = useMemo(()=>[
     ...(['status'] as const),
-    ...(['full_name','title','company_name','email'] as const)
+    ...(['full_name','title','company_name','email','company_website'] as const)
   ].filter(f=> !hasField(f) ), [value])
 
   return (
@@ -81,6 +85,31 @@ export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChan
           <button className="text-xs text-zinc-500 hover:text-zinc-300" onClick={()=> removeField(ts.field)}>✕</button>
         </div>
       ))}
+
+      {/* Website pill */}
+      {websiteSpec && (
+        <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded px-2 py-1">
+          <span className="text-xs text-zinc-400">Website</span>
+          <select
+            className="px-1 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-xs"
+            value={websiteSpec.op}
+            onChange={(e)=> updateSpec('company_website', { op: e.target.value as any } as any)}
+          >
+            <option value="like">like</option>
+            <option value="empty">empty</option>
+            <option value="not_empty">not empty</option>
+          </select>
+          {websiteSpec.op === 'like' && (
+            <input
+              className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-xs"
+              value={websiteSpec.value || ''}
+              placeholder="e.g. .io or github"
+              onChange={(e)=> updateSpec('company_website', { value: e.target.value } as any)}
+            />
+          )}
+          <button className="text-xs text-zinc-500 hover:text-zinc-300" onClick={()=> removeField('company_website')}>✕</button>
+        </div>
+      )}
     </div>
   )
 }

@@ -91,6 +91,13 @@ export default function CampaignDetail() {
     }
     const textMap: any = { full_name: 'f_full_name', title: 'f_title', company_name: 'f_company_name', email: 'f_email' }
     for (const ts of filterSpecs) {
+      if (ts.field==='company_website') {
+        const ws: any = ts as any
+        if (ws.op === 'like' && ws.value) paramsQ.set('f_company_website_like', ws.value)
+        if (ws.op === 'empty') paramsQ.set('f_company_website_empty', '1')
+        if (ws.op === 'not_empty') paramsQ.set('f_company_website_not_empty', '1')
+        continue
+      }
       if (ts.field!=='status' && (ts as any).value) paramsQ.set(textMap[ts.field], (ts as any).value)
     }
     if (sortBy) paramsQ.set('sortBy', sortBy)
