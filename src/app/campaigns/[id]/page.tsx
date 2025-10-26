@@ -98,6 +98,13 @@ export default function CampaignDetail() {
         if (ws.op === 'not_empty') paramsQ.set('f_company_website_not_empty', '1')
         continue
       }
+      if ((ts as any).field === 'email_like') {
+        const es: any = ts as any
+        if (es.op === 'like' && es.value) paramsQ.set('f_email_like', es.value)
+        if (es.op === 'empty') paramsQ.set('f_email_empty', '1')
+        if (es.op === 'not_empty') paramsQ.set('f_email_not_empty', '1')
+        continue
+      }
       if (ts.field!=='status' && (ts as any).value) paramsQ.set(textMap[ts.field], (ts as any).value)
     }
     if (sortBy) paramsQ.set('sortBy', sortBy)

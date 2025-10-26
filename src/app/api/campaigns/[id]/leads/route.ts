@@ -21,6 +21,9 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   const f_company_website_like = searchParams.get('f_company_website_like') || undefined
   const f_company_website_empty = searchParams.get('f_company_website_empty') === '1' || searchParams.get('f_company_website_empty') === 'true'
   const f_company_website_not_empty = searchParams.get('f_company_website_not_empty') === '1' || searchParams.get('f_company_website_not_empty') === 'true'
+  const f_email_like = searchParams.get('f_email_like') || undefined
+  const f_email_empty = searchParams.get('f_email_empty') === '1' || searchParams.get('f_email_empty') === 'true'
+  const f_email_not_empty = searchParams.get('f_email_not_empty') === '1' || searchParams.get('f_email_not_empty') === 'true'
 
   const supa = supabaseServer()
   const selectCols = 'id,first_name,last_name,full_name,company_name,company_website,email,personal_email,title,industry,city,state,country,ice_breaker,ice_status,enriched_at,created_at'
@@ -48,6 +51,9 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   if (f_company_website_like) query = query.ilike('company_website', `%${f_company_website_like}%`)
   if (f_company_website_empty && !f_company_website_not_empty) query = query.or('company_website.is.null,company_website.eq.')
   if (f_company_website_not_empty && !f_company_website_empty) query = query.not('company_website', 'is', null).neq('company_website','')
+  if (f_email_like) query = query.ilike('email', `%${f_email_like}%`)
+  if (f_email_empty && !f_email_not_empty) query = query.or('email.is.null,email.eq.')
+  if (f_email_not_empty && !f_email_empty) query = query.not('email', 'is', null).neq('email','')
   if (idsOnly) {
     const fromIds = (page - 1) * pageSize
     const toIds = Math.max(fromIds, fromIds + pageSize - 1)
