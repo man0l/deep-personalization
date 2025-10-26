@@ -3,7 +3,8 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card'
 import { Button } from '@/components/ui/button'
 import { Badge } from '@/components/ui/badge'
 import { supabaseServer } from '@/lib/supabase/server'
-import { revalidatePath } from 'next/cache'
+import { DuplicateCampaignButton } from './DuplicateCampaignButton'
+import { AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription, AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger } from '@/components/ui/alert-dialog'
 
 export default async function CampaignsHome() {
   // Query directly from the server to avoid relative fetch issues
@@ -56,20 +57,34 @@ export default async function CampaignsHome() {
                 <Button asChild variant="secondary" className="bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
                   <Link href={`/campaigns/${c.id}/edit`}>Edit</Link>
                 </Button>
-                <form action={async ()=>{
-                  'use server'
-                  // call duplicate action
-                  await fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/api/campaigns/${c.id}`, {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ action: 'duplicate' })
-                  }).catch(()=>{})
-                  revalidatePath('/campaigns')
-                }}>
-                  <Button type="submit" variant="secondary" className="bg-zinc-800 text-zinc-200 hover:bg-zinc-700">
-                    Duplicate
-                  </Button>
-                </form>
+                <DuplicateCampaignButton id={c.id} />
+                <AlertDialog>
+                  <AlertDialogTrigger asChild>
+                    <Button variant="destructive">Delete</Button>
+                  </AlertDialogTrigger>
+                  <AlertDialogContent>
+                    <AlertDialogHeader>
+                      <AlertDialogTitle>Delete campaign?</AlertDialogTitle>
+                      <AlertDialogDescription>
+                        This will permanently delete this campaign and all related leads. This action cannot be undone.
+                      </AlertDialogDescription>
+                    </AlertDialogHeader>
+                    <AlertDialogFooter>
+                      <AlertDialogCancel>Cancel</AlertDialogCancel>
+                      <AlertDialogAction
+                        className="bg-red-600 hover:bg-red-500"
+                        asChild
+                      >
+                        <form action={async ()=>{
+                          'use server'
+                          await fetch(`${process.env.NEXT_PUBLIC_SITE_URL ?? ''}/api/campaigns/${c.id}`, { method: 'DELETE' }).catch(()=>{})
+                        }}>
+                          <button type="submit">Delete</button>
+                        </form>
+                      </AlertDialogAction>
+                    </AlertDialogFooter>
+                  </AlertDialogContent>
+                </AlertDialog>
                 <Button asChild variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">
                   <Link href={`/campaigns/${c.id}`}>Open</Link>
                 </Button>

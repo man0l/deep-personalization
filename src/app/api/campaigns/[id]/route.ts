@@ -73,4 +73,14 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
   return NextResponse.json({ purged: true })
 }
 
+export async function DELETE(_req: Request, context: { params: Promise<{ id: string }> | { id: string } }) {
+  const p: any = await (context.params as any)
+  const id = (p?.id || p?.then ? (await (context.params as Promise<{ id: string }>)).id : p.id)
+  const supa = supabaseServer()
+  // Deleting the campaign cascades to related leads and enrichment_jobs (see schema)
+  const { error } = await supa.from('campaigns').delete().eq('id', id)
+  if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+  return NextResponse.json({ deleted: true })
+}
+
 
