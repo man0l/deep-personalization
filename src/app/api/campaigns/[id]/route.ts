@@ -42,12 +42,30 @@ export async function PATCH(req: Request, context: { params: Promise<{ id: strin
 }
 
 export async function POST(req: Request, context: { params: Promise<{ id: string }> | { id: string } }) {
-  // Action endpoint: { action: 'purge_queued' }
+  // Action endpoint: { action: 'purge_queued' | 'duplicate' }
   const p: any = await (context.params as any)
   const id = (p?.id || p?.then ? (await (context.params as Promise<{ id: string }>)).id : p.id)
   const body = await req.json().catch(()=>({}))
-  if (body?.action !== 'purge_queued') return NextResponse.json({ error: 'unsupported action' }, { status: 400 })
   const supa = supabaseServer()
+  if (body?.action === 'duplicate') {
+    // Duplicate campaign settings only (no leads/files)
+    const { data: original, error: cErr } = await supa.from('campaigns').select('*').eq('id', id).single()
+    if (cErr || !original) return NextResponse.json({ error: 'Campaign not found' }, { status: 404 })
+    const copyName = `${original.name} (Copy)`
+    const { data: created, error } = await supa
+      .from('campaigns')
+      .insert({
+        name: copyName,
+        service_line: original.service_line,
+        summarize_prompt: original.summarize_prompt,
+        icebreaker_prompt: original.icebreaker_prompt,
+      })
+      .select('*')
+      .single()
+    if (error) return NextResponse.json({ error: error.message }, { status: 500 })
+    return NextResponse.json({ duplicated: true, campaign: created })
+  }
+  if (body?.action !== 'purge_queued') return NextResponse.json({ error: 'unsupported action' }, { status: 400 })
   // Purge queue messages (best-effort) and mark queued leads as none
   try { await supa.rpc('purge_lead_enrichment') } catch {}
   const { error } = await supa.from('leads').update({ ice_status: 'none' }).eq('campaign_id', id).eq('ice_status', 'queued')

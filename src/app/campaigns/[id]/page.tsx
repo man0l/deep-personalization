@@ -1,5 +1,6 @@
 "use client"
 import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
+import Link from 'next/link'
 import { useParams } from 'next/navigation'
 import { ColumnDef, flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
@@ -261,6 +262,11 @@ export default function CampaignDetail() {
 
   return (
     <main className="space-y-4">
+      <div>
+        <Button asChild variant="secondary" className="bg-zinc-900 border border-zinc-800">
+          <Link href="/campaigns">← Back to Campaigns</Link>
+        </Button>
+      </div>
       <div className="text-sm text-zinc-400 flex gap-4">
         <button
           className="hover:text-violet-300"
