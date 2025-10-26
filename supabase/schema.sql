@@ -1,5 +1,11 @@
 -- Schema for campaigns, leads, enrichment_jobs
 create extension if not exists pgcrypto;
+create extension if not exists pg_net; -- HTTP jobs
+create extension if not exists pg_cron; -- cron scheduler
+create extension if not exists vault; -- Supabase Vault for secrets
+-- Allow PostgREST roles to use http functions (safe: only used by our wrappers)
+grant usage on schema net to service_role, authenticated, anon;
+grant execute on all functions in schema net to service_role, authenticated, anon;
 
 create table if not exists campaigns (
   id uuid primary key default gen_random_uuid(),
@@ -151,4 +157,118 @@ exception when others then
 end;
 $$;
 
+
+
+-- Cron dispatcher: invokes the enrichment worker via HTTP N times
+-- Requires database parameters:
+--   alter database postgres set app.settings.functions_url = 'https://<PROJECT>.supabase.co';
+--   alter database postgres set app.settings.anon_key = '<ANON_JWT>';
+create or replace function public.invoke_enrichment_worker(n int default 1)
+returns void
+language plpgsql
+security definer
+set search_path = public, net
+as $$
+declare
+  base_url text := current_setting('app.settings.functions_url', true);
+  anon_key text := current_setting('app.settings.anon_key', true);
+  i int;
+  target_url text;
+begin
+  if coalesce(base_url,'') = '' or coalesce(anon_key,'') = '' then
+    raise notice 'invoke_enrichment_worker: missing app.settings.* (functions_url or anon_key)';
+    return;
+  end if;
+  target_url := base_url || '/functions/v1/enrichment-worker';
+  for i in 1..greatest(1,n) loop
+    perform net.http_post(
+      url => target_url,
+      headers => jsonb_build_object('Authorization', 'Bearer ' || anon_key)
+    );
+  end loop;
+end;
+$$;
+
+-- Create three per-minute schedules (idempotent unschedule, then schedule)
+do $$ begin perform cron.unschedule('enrichment_worker_a'); exception when others then null; end $$;
+do $$ begin perform cron.unschedule('enrichment_worker_b'); exception when others then null; end $$;
+do $$ begin perform cron.unschedule('enrichment_worker_c'); exception when others then null; end $$;
+
+select cron.schedule('enrichment_worker_a', '*/1 * * * *', $$select public.invoke_enrichment_worker(1);$$);
+select cron.schedule('enrichment_worker_b', '*/1 * * * *', $$select public.invoke_enrichment_worker(1);$$);
+select cron.schedule('enrichment_worker_c', '*/1 * * * *', $$select public.invoke_enrichment_worker(1);$$);
+
+-- Vault-based dispatcher (preferred): reads URL and key from Supabase Vault
+-- Requires two named secrets in Vault:
+--   name='functions_url' with value like 'https://<project>.supabase.co'
+--   name='anon_key' with your project's anon JWT
+create or replace function public.invoke_enrichment_worker_vault(n int default 1)
+returns void
+language plpgsql
+security definer
+set search_path = public, vault, net
+as $$
+declare
+  base_url text;
+  functions_url text;
+  anon_key text;
+  i int;
+  target_url text;
+begin
+  -- Prefer an explicit FUNCTIONS_URL secret (full function base URL),
+  -- fallback to SUPABASE_URL if present.
+  select decrypted_secret into functions_url from vault.decrypted_secrets where name = 'FUNCTIONS_URL' limit 1;
+  select decrypted_secret into base_url from vault.decrypted_secrets where name = 'SUPABASE_URL' limit 1;
+  select decrypted_secret into anon_key from vault.decrypted_secrets where name = 'SUPABASE_ANON_KEY' limit 1;
+
+  if coalesce(anon_key,'') = '' then
+    raise notice 'invoke_enrichment_worker_vault: missing Vault secret SUPABASE_ANON_KEY';
+    return;
+  end if;
+
+  if coalesce(functions_url,'') <> '' then
+    -- functions_url expected like: https://<project>.functions.supabase.co
+    target_url := rtrim(functions_url, '/') || '/enrichment-worker';
+  elsif coalesce(base_url,'') <> '' then
+    -- fallback: project base + /functions/v1 path
+    target_url := rtrim(base_url, '/') || '/functions/v1/enrichment-worker';
+  else
+    raise notice 'invoke_enrichment_worker_vault: missing Vault URL secrets (FUNCTIONS_URL or SUPABASE_URL)';
+    return;
+  end if;
+
+  for i in 1..greatest(1,n) loop
+    perform net.http_post(
+      url => target_url,
+      headers => jsonb_build_object('Authorization', 'Bearer ' || anon_key)
+    );
+  end loop;
+end;
+$$;
+
+-- Switch cron schedules to the Vault-based dispatcher
+do $$ begin perform cron.unschedule('enrichment_worker_a'); exception when others then null; end $$;
+do $$ begin perform cron.unschedule('enrichment_worker_b'); exception when others then null; end $$;
+do $$ begin perform cron.unschedule('enrichment_worker_c'); exception when others then null; end $$;
+do $$ begin perform cron.unschedule('enrichment_worker_d'); exception when others then null; end $$;
+do $$ begin perform cron.unschedule('enrichment_worker_e'); exception when others then null; end $$;
+
+
+select cron.schedule('enrichment_worker_a', '*/1 * * * *', $$select public.invoke_enrichment_worker_vault(1);$$);
+select cron.schedule('enrichment_worker_b', '*/1 * * * *', $$select public.invoke_enrichment_worker_vault(1);$$);
+select cron.schedule('enrichment_worker_c', '*/1 * * * *', $$select public.invoke_enrichment_worker_vault(1);$$);
+select cron.schedule('enrichment_worker_d', '*/1 * * * *', $$select public.invoke_enrichment_worker_vault(1);$$);
+select cron.schedule('enrichment_worker_e', '*/1 * * * *', $$select public.invoke_enrichment_worker_vault(1);$$);
+
+-- Cleanup: drop deprecated inline dispatcher if it exists
+do $$
+begin
+  perform 1 from pg_proc where pronamespace = 'public'::regnamespace and proname = 'invoke_enrichment_worker_inline';
+  if found then
+    execute 'drop function if exists public.invoke_enrichment_worker_inline(int)';
+  end if;
+exception when others then
+  -- ignore
+  null;
+end $$;
 
