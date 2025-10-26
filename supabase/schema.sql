@@ -88,4 +88,67 @@ as $$
   select pgmq.archive('lead_enrichment', mid);
 $$;
 
+-- Dequeue up to cnt messages and atomically claim leads (set processing).
+-- If a lead cannot be claimed (already processing/done), archive the message immediately.
+create or replace function public.dequeue_and_claim_lead_enrichment(
+  cnt int default 10,
+  vt_seconds int default 120
+)
+returns table(msg_id bigint, lead_id uuid)
+language plpgsql
+security definer
+set search_path = public, pgmq
+as $$
+declare
+  r record;
+  lid uuid;
+  claimed boolean;
+begin
+  for r in select * from pgmq.read('lead_enrichment', vt_seconds, cnt)
+  loop
+    begin
+      lid := (r.message->>'leadId')::uuid;
+    exception when others then
+      -- malformed payload; archive and continue
+      perform pgmq.archive('lead_enrichment', r.msg_id);
+      continue;
+    end;
+
+    with c as (
+      update leads
+         set ice_status = 'processing', enriched_at = null
+       where id = lid
+         and ice_status <> 'processing'
+         and ice_status <> 'done'
+       returning id
+    )
+    select exists(select 1 from c) into claimed;
+
+    if claimed then
+      msg_id := r.msg_id;
+      lead_id := lid;
+      return next;
+    else
+      -- duplicate or completed; archive now to avoid churn
+      perform pgmq.archive('lead_enrichment', r.msg_id);
+    end if;
+  end loop;
+end;
+$$;
+
+-- Purge all messages from the lead_enrichment queue (best-effort)
+create or replace function public.purge_lead_enrichment()
+returns void
+language plpgsql
+security definer
+set search_path = public, pgmq
+as $$
+begin
+  perform pgmq.purge('lead_enrichment');
+exception when others then
+  -- swallow errors so API can still reset lead statuses
+  raise notice 'purge_lead_enrichment error: %', sqlerrm;
+end;
+$$;
+
 

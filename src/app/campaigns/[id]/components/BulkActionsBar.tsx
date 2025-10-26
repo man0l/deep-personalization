@@ -19,7 +19,7 @@ export function BulkActionsBar({
   )
 
   const [busy, setBusy] = useState(false)
-  const someVisibleChecked = useMemo(()=> visibleIds.some(id=> selectionStore.getSelectedIds().includes(id)), [visibleIds, selectedCount])
+  const someVisibleChecked = useMemo(()=> visibleIds.some(id=> selectionStore.isSelected(id)), [visibleIds, selectedCount])
 
   async function doEnrich(ids: string[]) {
     if (ids.length===0) return

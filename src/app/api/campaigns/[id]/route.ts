@@ -48,7 +48,8 @@ export async function POST(req: Request, context: { params: Promise<{ id: string
   const body = await req.json().catch(()=>({}))
   if (body?.action !== 'purge_queued') return NextResponse.json({ error: 'unsupported action' }, { status: 400 })
   const supa = supabaseServer()
-  // Mark queued leads as none
+  // Purge queue messages (best-effort) and mark queued leads as none
+  try { await supa.rpc('purge_lead_enrichment') } catch {}
   const { error } = await supa.from('leads').update({ ice_status: 'none' }).eq('campaign_id', id).eq('ice_status', 'queued')
   if (error) return NextResponse.json({ error: error.message }, { status: 500 })
   return NextResponse.json({ purged: true })

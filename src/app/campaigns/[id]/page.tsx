@@ -1,17 +1,17 @@
 "use client"
-import { useCallback, useEffect, useMemo, useRef, useState, useTransition } from 'react'
+import { useCallback, useEffect, useMemo, useRef, useState } from 'react'
 import { useParams } from 'next/navigation'
 import { ColumnDef, flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
 import { SelectionCheckbox, HeaderSelectionCheckbox, selectionStore } from './use-campaign-leads'
 import type { Lead } from './types'
-import { FiltersDialog } from './components/FiltersDialog'
 import { ViewMenu } from './components/ViewMenu'
 import { PurgeQueuedDialog } from './components/PurgeQueuedDialog'
 import { DetailsDialog } from './components/DetailsDialog'
 import { PaginationBar } from './components/PaginationBar'
 import { BulkActionsBar } from './components/BulkActionsBar'
+import { FilterBuilder, type FilterSpec } from './components/FilterBuilder'
 
  
 
@@ -33,8 +33,8 @@ export default function CampaignDetail() {
     }
   })
   useEffect(()=>{ try { localStorage.setItem(`view:${id}:visibleCols`, JSON.stringify(visibleCols)) } catch{} }, [id, visibleCols])
-  const [filtersOpen, setFiltersOpen] = useState(false)
   const [filters, setFilters] = useState({ full_name: '', title: '', company_name: '', email: '' })
+  const [filterSpecs, setFilterSpecs] = useState<FilterSpec[]>([])
   const [sortBy, setSortBy] = useState<string>('created_at')
   const [sortDir, setSortDir] = useState<'asc'|'desc'>('desc')
   // Removed header-level select-all controls; keep only per-row selection
@@ -51,7 +51,6 @@ export default function CampaignDetail() {
   const [pollUntil, setPollUntil] = useState<number>(0)
   const [enriching, setEnriching] = useState(false)
   const [purging, setPurging] = useState(false)
-  const [isPending, startTransition] = useTransition()
 
   // After mount, hydrate preferences from localStorage to avoid SSR/client mismatch
   useEffect(()=>{
@@ -78,10 +77,22 @@ export default function CampaignDetail() {
     } else {
       if (hasIce !== 'all') paramsQ.set('hasIce', hasIce)
     }
-    if (filters.full_name) paramsQ.set('f_full_name', filters.full_name)
-    if (filters.title) paramsQ.set('f_title', filters.title)
-    if (filters.company_name) paramsQ.set('f_company_name', filters.company_name)
-    if (filters.email) paramsQ.set('f_email', filters.email)
+    // Compile FilterBuilder specs
+    const statusSpec = filterSpecs.find(f=> f.field==='status') as any
+    if (statusSpec && Array.isArray(statusSpec.values) && statusSpec.values.length>0) {
+      // If op is 'any' and a single value is chosen we can map to status=; otherwise rely on hasIce or future API expansion
+      if (statusSpec.values.length===1 && statusSpec.op==='any') {
+        paramsQ.set('status', statusSpec.values[0])
+      } else if (statusSpec.op==='any' && statusSpec.values.includes('done') && !statusSpec.values.some((v:string)=> v!=='done')) {
+        paramsQ.set('hasIce','true')
+      } else if (statusSpec.op==='none' && statusSpec.values.includes('done') && statusSpec.values.length===1) {
+        paramsQ.set('hasIce','false')
+      }
+    }
+    const textMap: any = { full_name: 'f_full_name', title: 'f_title', company_name: 'f_company_name', email: 'f_email' }
+    for (const ts of filterSpecs) {
+      if (ts.field!=='status' && (ts as any).value) paramsQ.set(textMap[ts.field], (ts as any).value)
+    }
     if (sortBy) paramsQ.set('sortBy', sortBy)
     if (sortDir) paramsQ.set('sortDir', sortDir)
     const res = await fetch(`/api/campaigns/${id}/leads?` + paramsQ.toString(), { cache: 'no-store' })
@@ -94,16 +105,20 @@ export default function CampaignDetail() {
       setData(json.leads)
       setTotal(json.total)
       if (json.totals) setTotals(json.totals)
-      selectionStore.clear()
     } else if (!res.ok) {
       // best-effort fallback to keep UI responsive
       setData([])
       setTotal(0)
     }
     setLoading(false)
-  }, [page, pageSize, pollUntil, q, statusFilter, hasIce, filters.full_name, filters.title, filters.company_name, filters.email, sortBy, sortDir, id])
+  }, [page, pageSize, pollUntil, q, statusFilter, hasIce, filters.full_name, filters.title, filters.company_name, filters.email, sortBy, sortDir, id, filterSpecs])
 
   useEffect(() => { load() }, [load])
+
+  // Clear selection when query inputs change (but not on polling refreshes)
+  useEffect(()=>{
+    selectionStore.clear()
+  }, [page, pageSize, q, hasIce, statusFilter, filters.full_name, filters.title, filters.company_name, filters.email, sortBy, sortDir, id, filterSpecs])
 
   // Kick off a short polling window on mount (~25s)
   useEffect(()=>{
@@ -144,7 +159,7 @@ export default function CampaignDetail() {
   const columns = useMemo<ColumnDef<Lead>[]>(() => [
     visibleCols.select ? { header: (
       <div className="flex items-center gap-2">
-        <HeaderSelectionCheckbox ids={data.map(l=> l.id)} />
+        <HeaderSelectionCheckbox ids={data.map(l=> l.id)} disabled={loading} />
       </div>
     ), id: 'select', cell: ({ row }: any) => {
       const id = row.original.id as string
@@ -169,7 +184,7 @@ export default function CampaignDetail() {
         <button className="underline" onClick={async ()=>{ const lead = row.original as Lead; setDetailsLead(lead); setStatusDraft(lead.ice_status); setDetailsOpen(true) }}>Details</button>
       </div>
     ) } : undefined,
-  ].filter(Boolean) as ColumnDef<Lead>[], [visibleCols, sortBy, sortDir])
+  ].filter(Boolean) as ColumnDef<Lead>[], [visibleCols, sortBy, sortDir, data])
 
   const table = useReactTable({
     data,
@@ -251,23 +266,7 @@ export default function CampaignDetail() {
       <div className="flex items-center gap-4">
         <Input placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') { setPage(1) } }} />
         <Button onClick={enrichAllMissing} disabled={enriching} variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">Enrich All Missing (page)</Button>
-        <Button
-          variant="secondary"
-          className={`bg-zinc-900 border ${ (filters.full_name||filters.title||filters.company_name||filters.email||statusFilter||hasIce!=='all')? 'border-violet-700 text-violet-300':'border-zinc-800'}`}
-          onClick={()=> setFiltersOpen(true)}
-        >Filters</Button>
-        <FiltersDialog
-          open={filtersOpen}
-          onOpenChange={setFiltersOpen}
-          filters={filters}
-          setFilters={(f)=> setFilters(f)}
-          statusFilter={statusFilter as any}
-          setStatusFilter={(s)=> setStatusFilter(s as any)}
-          hasIce={hasIce}
-          setHasIce={setHasIce}
-          apply={()=>{ startTransition(()=>{ setPage(1); setFiltersOpen(false) }) }}
-          clear={()=>{ startTransition(()=>{ setFilters({ full_name:'', title:'', company_name:'', email:'' }); setHasIce('all'); setStatusFilter(null); setPage(1); setFiltersOpen(false) }) }}
-        />
+        <FilterBuilder value={filterSpecs} onChange={(v)=>{ setFilterSpecs(v); setPage(1) }} />
         <ViewMenu
           density={density}
           setDensity={setDensity}
@@ -275,20 +274,7 @@ export default function CampaignDetail() {
           setVisibleCols={(u)=> setVisibleCols(u)}
         />
         <PurgeQueuedDialog onConfirm={purgeQueued} disabled={purging} />
-        <div className="ml-auto flex items-center gap-2">
-          <span className="text-xs text-zinc-400">Sort</span>
-          <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" value={sortBy} onChange={e=>{ setSortBy(e.target.value as any); setPage(1) }}>
-            <option value="created_at">Created</option>
-            <option value="full_name">Name</option>
-            <option value="company_name">Company</option>
-            <option value="email">Email</option>
-            <option value="ice_status">Ice</option>
-          </select>
-          <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" value={sortDir} onChange={e=>{ setSortDir(e.target.value as any); setPage(1) }}>
-            <option value="asc">Asc</option>
-            <option value="desc">Desc</option>
-          </select>
-        </div>
+        
       </div>
       {/* Bulk actions */}
       <BulkActionsBar

@@ -93,7 +93,7 @@ export const SelectionCheckbox = memo(function SelectionCheckbox({ id }: { id: s
   )
 })
 
-export const HeaderSelectionCheckbox = memo(function HeaderSelectionCheckbox({ ids }: { ids: string[] }) {
+export const HeaderSelectionCheckbox = memo(function HeaderSelectionCheckbox({ ids, disabled }: { ids: string[], disabled?: boolean }) {
   const tick = useSyncExternalStore(
     (l)=> selectionStore.subscribeAll(l),
     () => selectionStore.getSelectedIds().length,
@@ -105,6 +105,7 @@ export const HeaderSelectionCheckbox = memo(function HeaderSelectionCheckbox({ i
   return (
     <Checkbox
       checked={checkedValue as any}
+      disabled={disabled}
       onCheckedChange={(v)=> selectionStore.setMany(ids, Boolean(v))}
     />
   )
