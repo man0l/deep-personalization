@@ -260,6 +260,47 @@ export default function CampaignDetail() {
   // Scroll container ref to sync horizontal scroll with footer proxy scrollbar
   const tableScrollRef = useRef<HTMLDivElement | null>(null)
 
+  const exportQuery = useMemo(()=>{
+    const paramsQ = new URLSearchParams()
+    if (q) paramsQ.set('q', q)
+    if (statusFilter) {
+      paramsQ.set('status', statusFilter)
+    } else {
+      if (hasIce !== 'all') paramsQ.set('hasIce', hasIce)
+    }
+    const statusSpec = filterSpecs.find(f=> f.field==='status') as any
+    if (statusSpec && Array.isArray(statusSpec.values) && statusSpec.values.length>0) {
+      if (statusSpec.values.length===1 && statusSpec.op==='any') {
+        paramsQ.set('status', statusSpec.values[0])
+      } else if (statusSpec.op==='any' && statusSpec.values.includes('done') && !statusSpec.values.some((v:string)=> v!=='done')) {
+        paramsQ.set('hasIce','true')
+      } else if (statusSpec.op==='none' && statusSpec.values.includes('done') && statusSpec.values.length===1) {
+        paramsQ.set('hasIce','false')
+      }
+    }
+    const textMap: any = { full_name: 'f_full_name', title: 'f_title', company_name: 'f_company_name', email: 'f_email' }
+    for (const ts of filterSpecs) {
+      if ((ts as any).field === 'company_website') {
+        const ws: any = ts as any
+        if (ws.op === 'like' && ws.value) paramsQ.set('f_company_website_like', ws.value)
+        if (ws.op === 'empty') paramsQ.set('f_company_website_empty', '1')
+        if (ws.op === 'not_empty') paramsQ.set('f_company_website_not_empty', '1')
+        continue
+      }
+      if ((ts as any).field === 'email_like') {
+        const es: any = ts as any
+        if (es.op === 'like' && es.value) paramsQ.set('f_email_like', es.value)
+        if (es.op === 'empty') paramsQ.set('f_email_empty', '1')
+        if (es.op === 'not_empty') paramsQ.set('f_email_not_empty', '1')
+        continue
+      }
+      if ((ts as any).field !== 'status' && (ts as any).value) paramsQ.set(textMap[(ts as any).field], (ts as any).value)
+    }
+    if (sortBy) paramsQ.set('sortBy', sortBy)
+    if (sortDir) paramsQ.set('sortDir', sortDir)
+    return paramsQ.toString()
+  }, [q, statusFilter, hasIce, filterSpecs, sortBy, sortDir])
+
   return (
     <main className="space-y-4">
       <div>
@@ -302,7 +343,9 @@ export default function CampaignDetail() {
       <BulkActionsBar
         visibleIds={useMemo(()=> data.map(l=> l.id), [data])}
         onAfterAction={() => { setPollUntil(Date.now() + 30000); load() }}
-        hideWhenEmpty
+        hideWhenEmpty={false}
+        campaignId={id}
+        exportQuery={exportQuery}
       />
 
       <div ref={tableScrollRef} className="overflow-x-auto hide-x-scrollbar border border-zinc-800 rounded">

@@ -7,10 +7,14 @@ export function BulkActionsBar({
   visibleIds,
   onAfterAction,
   hideWhenEmpty,
+  campaignId,
+  exportQuery,
 }: {
   visibleIds: string[]
   onAfterAction: () => void
   hideWhenEmpty?: boolean
+  campaignId: string
+  exportQuery: string
 }) {
   const selectedCount = useSyncExternalStore(
     (l)=> selectionStore.subscribeAll(l),
@@ -51,12 +55,15 @@ export function BulkActionsBar({
 
   const allSelectedIds = useMemo(()=> selectionStore.getSelectedIds(), [selectedCount])
 
-  if (hideWhenEmpty && selectedCount === 0) return null
+  function download(url: string) {
+    if (typeof window !== 'undefined') window.open(url, '_blank')
+  }
 
   return (
     <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded px-2 py-2">
       <span className="text-xs text-zinc-400">Selected: {selectedCount}</span>
       <div className="w-px h-5 bg-zinc-800 mx-1" />
+      {/* Selection-based actions */}
       <Button variant="secondary" className="bg-violet-700/30 text-violet-300 border border-violet-800/50 hover:bg-violet-700/50" disabled={busy || allSelectedIds.length===0} onClick={()=> run(()=> doEnrich(allSelectedIds))}>Enrich</Button>
       <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" disabled={busy || allSelectedIds.length===0} onChange={(e)=>{
         const v = e.target.value
@@ -69,6 +76,26 @@ export function BulkActionsBar({
       </select>
       <Button variant="secondary" className="bg-red-900/20 text-red-300 border border-red-900/40 hover:bg-red-900/30" disabled={busy || allSelectedIds.length===0} onClick={()=> run(()=> doDelete(allSelectedIds))}>Delete</Button>
       <Button variant="secondary" className="bg-zinc-900 border border-zinc-800" onClick={onClear} disabled={selectedCount===0}>Clear selection</Button>
+
+      <div className="w-px h-5 bg-zinc-800 mx-2" />
+      {/* Export actions */}
+      <Button
+        variant="secondary"
+        className="bg-zinc-900 border border-zinc-800"
+        disabled={allSelectedIds.length===0}
+        onClick={() => {
+          const url = `/api/campaigns/${campaignId}/leads/export?${exportQuery}` + (allSelectedIds.length>0? `&ids=${encodeURIComponent(allSelectedIds.join(','))}`:'')
+          download(url)
+        }}
+      >Export selected (CSV)</Button>
+      <Button
+        variant="secondary"
+        className="bg-zinc-900 border border-zinc-800"
+        onClick={() => {
+          const url = `/api/campaigns/${campaignId}/leads/export?${exportQuery}`
+          download(url)
+        }}
+      >Export all (CSV)</Button>
     </div>
   )
 }
