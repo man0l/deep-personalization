@@ -1,6 +1,7 @@
 "use client"
 import React, { useMemo, useSyncExternalStore, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { toast } from 'sonner'
 import { Sparkles, Trash2, X, ShieldCheck, Filter as FilterIcon, Download } from 'lucide-react'
 import { selectionStore } from '../use-campaign-leads'
 
@@ -60,18 +61,58 @@ export function BulkActionsBar({
     if (typeof window !== 'undefined') window.open(url, '_blank')
   }
 
+  function extractErrorMessage(payload: any, rawText: string): string {
+    let code: string | number | undefined
+    let message: string | undefined
+    let err: any = (payload && payload.error !== undefined) ? payload.error : payload
+    if (typeof err === 'string') {
+      try {
+        const obj = JSON.parse(err)
+        code = obj?.statusCode || obj?.code
+        message = obj?.message
+      } catch {
+        message = err
+      }
+    } else if (err && typeof err === 'object') {
+      code = err.statusCode || err.code
+      message = err.message
+    }
+    if (!message && typeof payload?.message === 'string') message = payload.message
+    if (!code && (payload?.statusCode || payload?.code)) code = payload.statusCode || payload.code
+    const base = message || rawText || 'Verification failed'
+    return code ? `${code}: ${base}` : base
+  }
+
   async function verifySelected() {
     const ids = allSelectedIds
     if (ids.length===0) return
     await run(async ()=>{
-      await fetch('/api/leads/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, campaignId }) })
+      const res = await fetch('/api/leads/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, campaignId }) })
+      let payload: any = null
+      let raw = ''
+      try { raw = await res.text(); payload = raw ? JSON.parse(raw) : null } catch {}
+      if (!res.ok || payload?.error) {
+        const msg = extractErrorMessage(payload, raw)
+        toast.error(msg)
+        return
+      }
+      toast.success('Verification queued', { description: `File ${payload?.fileId || ''}`.trim() })
     })
   }
 
   async function verifyAllFiltered() {
     const url = `/api/campaigns/${campaignId}/leads/verify-all?${exportQuery}`
     await run(async ()=>{
-      await fetch(url, { method: 'POST' })
+      const res = await fetch(url, { method: 'POST' })
+      let payload: any = null
+      let raw = ''
+      try { raw = await res.text(); payload = raw ? JSON.parse(raw) : null } catch {}
+      if (!res.ok || payload?.error) {
+        const msg = extractErrorMessage(payload, raw)
+        toast.error(msg)
+        return
+      }
+      toast.success('Verification queued', { description: `${payload?.scanned ?? 0} emails • File ${payload?.fileId || ''}`.trim() })
     })
   }
 
