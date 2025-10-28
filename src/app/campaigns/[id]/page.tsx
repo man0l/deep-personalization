@@ -278,7 +278,10 @@ export default function CampaignDetail() {
         if (es.op === 'not_empty') paramsQ.set('f_email_not_empty', '1')
         continue
       }
-      if ((ts as any).field !== 'status' && (ts as any).value) paramsQ.set(textMap[(ts as any).field], (ts as any).value)
+      if ((ts as any).field !== 'status' && (ts as any).value) {
+        const key = textMap[(ts as any).field]
+        if (key) paramsQ.set(key, (ts as any).value)
+      }
     }
     if (sortBy) paramsQ.set('sortBy', sortBy)
     if (sortDir) paramsQ.set('sortDir', sortDir)

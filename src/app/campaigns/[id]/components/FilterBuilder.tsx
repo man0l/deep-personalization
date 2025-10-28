@@ -39,7 +39,7 @@ export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChan
   const websiteSpec = value.find(v => v.field === 'company_website') as Extract<FilterSpec,{field:'company_website'}> | undefined
   const emailLikeSpec = value.find(v => v.field === 'email_like') as Extract<FilterSpec,{field:'email_like'}> | undefined
   const verificationSpec = value.find(v => v.field === 'verification') as Extract<FilterSpec,{field:'verification'}> | undefined
-  const textSpecs = value.filter(v => v.field !== 'status' && v.field !== 'company_website' && v.field !== 'email_like') as Extract<FilterSpec,{op:'contains'}>[]
+  const textSpecs = value.filter(v => v.field !== 'status' && v.field !== 'company_website' && v.field !== 'email_like' && v.field !== 'verification') as Extract<FilterSpec,{op:'contains'}>[]
 
   const availableFields: FilterSpec['field'][] = useMemo(()=>[
     ...(['status'] as const),
