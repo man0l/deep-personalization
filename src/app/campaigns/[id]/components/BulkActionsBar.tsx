@@ -76,7 +76,7 @@ export function BulkActionsBar({
   }
 
   return (
-    <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded px-2 py-2">
+    <div className="flex flex-wrap items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded px-2 py-2">
       <span className="text-xs text-zinc-400">Selected: {selectedCount}</span>
       <div className="w-px h-5 bg-zinc-800 mx-1" />
       {/* Selection-based actions */}

@@ -5,7 +5,7 @@ import { useParams } from 'next/navigation'
 import { ColumnDef, flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
-import { ArrowLeft, Sparkles } from 'lucide-react'
+import { ArrowLeft } from 'lucide-react'
 import { SelectionCheckbox, HeaderSelectionCheckbox, selectionStore } from './use-campaign-leads'
 import type { Lead } from './types'
 import { ViewMenu } from './components/ViewMenu'
@@ -51,7 +51,6 @@ export default function CampaignDetail() {
   const [statusFilter, setStatusFilter] = useState<'queued'|'processing'|'error'|null>(null)
   const [loading, setLoading] = useState(false)
   const [pollUntil, setPollUntil] = useState<number>(0)
-  const [enriching, setEnriching] = useState(false)
   const [purging, setPurging] = useState(false)
 
   // After mount, hydrate preferences from localStorage to avoid SSR/client mismatch
@@ -217,27 +216,7 @@ export default function CampaignDetail() {
 
   // selectedIds replaced with selectedCount + getSelectedIds for cheaper renders
 
-  async function enrich(ids: string[]) {
-    if (ids.length === 0 || enriching) return
-    setEnriching(true)
-    try {
-      const unique = Array.from(new Set(ids))
-      const chunkSize = 50
-      for (let i = 0; i < unique.length; i += chunkSize) {
-        const chunk = unique.slice(i, i + chunkSize)
-        await fetch('/api/leads/enrich', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ leadIds: chunk }) })
-        setPollUntil(Date.now() + 30000)
-      }
-      await load()
-    } finally {
-      setEnriching(false)
-    }
-  }
-
-  async function enrichAllMissing() {
-    const missing = data.filter(l=>l.ice_status !== 'done').map(l=>l.id)
-    await enrich(missing)
-  }
+  
 
   async function purgeQueued() {
     if (purging) return
@@ -333,9 +312,6 @@ export default function CampaignDetail() {
       </div>
       <div className="flex items-center gap-4">
         <Input placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') { setPage(1) } }} />
-        <Button onClick={enrichAllMissing} disabled={enriching} variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">
-          <Sparkles className="mr-1 h-4 w-4" /> Enrich All Missing (page)
-        </Button>
         <FilterBuilder value={filterSpecs} onChange={(v)=>{ setFilterSpecs(v); setPage(1) }} />
         <ViewMenu
           density={density}
