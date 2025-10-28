@@ -35,6 +35,9 @@ create table if not exists leads (
   ice_breaker text,
   ice_status text not null default 'none',
   enriched_at timestamptz,
+  -- Email verification fields
+  verification_status text default 'unverified',
+  verification_checked_at timestamptz,
   raw jsonb,
   created_at timestamptz not null default now()
 );
@@ -46,6 +49,7 @@ create index if not exists leads_campaign_idx on leads(campaign_id);
 create index if not exists leads_email_idx on leads(lower(coalesce(email,'')));
 create index if not exists leads_company_site_idx on leads(lower(coalesce(company_website,'')));
 create index if not exists leads_ice_status_idx on leads(ice_status);
+create index if not exists leads_verification_status_idx on leads(verification_status);
 
 create table if not exists enrichment_jobs (
   id uuid primary key default gen_random_uuid(),

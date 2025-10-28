@@ -14,6 +14,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   const sortDir = (searchParams.get('sortDir') as 'asc' | 'desc' | null) || undefined
   const idsOnly = searchParams.get('idsOnly') === 'true'
   const includeTotals = searchParams.get('includeTotals') === '1' || searchParams.get('includeTotals') === 'true'
+  const verification = searchParams.get('verification') || undefined
   const f_full_name = searchParams.get('f_full_name') || undefined
   const f_title = searchParams.get('f_title') || undefined
   const f_company_name = searchParams.get('f_company_name') || undefined
@@ -37,6 +38,9 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   if (hasIce === 'false') query = query.neq('ice_status', 'done')
   if (status && ['done','queued','processing','error','none'].includes(status)) {
     query = query.eq('ice_status', status)
+  }
+  if (verification && ['unverified','verified_ok','verified_bad','verified_unknown'].includes(verification)) {
+    query = query.eq('verification_status', verification)
   }
   if (q) {
     // Simple OR search across common fields

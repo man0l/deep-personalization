@@ -59,6 +59,21 @@ export function BulkActionsBar({
     if (typeof window !== 'undefined') window.open(url, '_blank')
   }
 
+  async function verifySelected() {
+    const ids = allSelectedIds
+    if (ids.length===0) return
+    await run(async ()=>{
+      await fetch('/api/leads/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) })
+    })
+  }
+
+  async function verifyAllFiltered() {
+    const url = `/api/campaigns/${campaignId}/leads/verify-all?${exportQuery}`
+    await run(async ()=>{
+      await fetch(url, { method: 'POST' })
+    })
+  }
+
   return (
     <div className="flex items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded px-2 py-2">
       <span className="text-xs text-zinc-400">Selected: {selectedCount}</span>
@@ -77,6 +92,19 @@ export function BulkActionsBar({
       <Button variant="secondary" className="bg-red-900/20 text-red-300 border border-red-900/40 hover:bg-red-900/30" disabled={busy || allSelectedIds.length===0} onClick={()=> run(()=> doDelete(allSelectedIds))}>Delete</Button>
       <Button variant="secondary" className="bg-zinc-900 border border-zinc-800" onClick={onClear} disabled={selectedCount===0}>Clear selection</Button>
 
+      <div className="w-px h-5 bg-zinc-800 mx-2" />
+      {/* Verify actions */}
+      <Button
+        variant="secondary"
+        className="bg-zinc-900 border border-zinc-800"
+        disabled={allSelectedIds.length===0}
+        onClick={verifySelected}
+      >Verify selected</Button>
+      <Button
+        variant="secondary"
+        className="bg-zinc-900 border border-zinc-800"
+        onClick={verifyAllFiltered}
+      >Verify all (filtered)</Button>
       <div className="w-px h-5 bg-zinc-800 mx-2" />
       {/* Export actions */}
       <Button

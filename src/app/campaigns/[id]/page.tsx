@@ -108,6 +108,8 @@ export default function CampaignDetail() {
       }
       if (ts.field!=='status' && (ts as any).value) paramsQ.set(textMap[ts.field], (ts as any).value)
     }
+    const verificationSpec = filterSpecs.find((f:any)=> f.field==='verification') as any
+    if (verificationSpec && verificationSpec.value) paramsQ.set('verification', verificationSpec.value)
     if (sortBy) paramsQ.set('sortBy', sortBy)
     if (sortDir) paramsQ.set('sortDir', sortDir)
     const res = await fetch(`/api/campaigns/${id}/leads?` + paramsQ.toString(), { cache: 'no-store' })
@@ -268,6 +270,8 @@ export default function CampaignDetail() {
     } else {
       if (hasIce !== 'all') paramsQ.set('hasIce', hasIce)
     }
+    const verificationSpec = filterSpecs.find((f:any)=> f.field==='verification') as any
+    if (verificationSpec && verificationSpec.value) paramsQ.set('verification', verificationSpec.value)
     const statusSpec = filterSpecs.find(f=> f.field==='status') as any
     if (statusSpec && Array.isArray(statusSpec.values) && statusSpec.values.length>0) {
       if (statusSpec.values.length===1 && statusSpec.op==='any') {

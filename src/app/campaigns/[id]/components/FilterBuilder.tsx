@@ -8,6 +8,7 @@ export type FilterSpec =
   | { field: 'full_name'|'title'|'company_name'|'email', op: 'contains', value: string }
   | { field: 'company_website', op: 'like'|'empty'|'not_empty', value?: string }
   | { field: 'email_like', op: 'like'|'empty'|'not_empty', value?: string }
+  | { field: 'verification', op: 'is', value: 'unverified'|'verified_ok'|'verified_bad'|'verified_unknown' }
 
 export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChange: (v: FilterSpec[]) => void }) {
   const hasField = (f: FilterSpec['field']) => value.some(v => v.field === f)
@@ -20,6 +21,8 @@ export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChan
         ? { field: 'company_website', op: 'like', value: '' }
         : f === 'email_like'
           ? { field: 'email_like', op: 'like', value: '' }
+        : f === 'verification'
+          ? { field: 'verification', op: 'is', value: 'unverified' }
         : { field: f as any, op: 'contains', value: '' }
     onChange([...value, next])
   }
@@ -35,11 +38,12 @@ export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChan
   const statusSpec = value.find(v => v.field === 'status') as Extract<FilterSpec,{field:'status'}> | undefined
   const websiteSpec = value.find(v => v.field === 'company_website') as Extract<FilterSpec,{field:'company_website'}> | undefined
   const emailLikeSpec = value.find(v => v.field === 'email_like') as Extract<FilterSpec,{field:'email_like'}> | undefined
+  const verificationSpec = value.find(v => v.field === 'verification') as Extract<FilterSpec,{field:'verification'}> | undefined
   const textSpecs = value.filter(v => v.field !== 'status' && v.field !== 'company_website' && v.field !== 'email_like') as Extract<FilterSpec,{op:'contains'}>[]
 
   const availableFields: FilterSpec['field'][] = useMemo(()=>[
     ...(['status'] as const),
-    ...(['full_name','title','company_name','email','company_website','email_like'] as const)
+    ...(['full_name','title','company_name','email','company_website','email_like','verification'] as const)
   ].filter(f=> !hasField(f) ), [value])
 
   return (
@@ -116,6 +120,23 @@ export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChan
       )}
 
       {/* Email pill */}
+      {/* Verification pill */}
+      {verificationSpec && (
+        <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded px-2 py-1">
+          <span className="text-xs text-zinc-400">Verification</span>
+          <select
+            className="px-1 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-xs"
+            value={verificationSpec.value}
+            onChange={(e)=> updateSpec('verification', { value: e.target.value as any } as any)}
+          >
+            <option value="unverified">Not verified</option>
+            <option value="verified_ok">Verified OK</option>
+            <option value="verified_bad">Verified Bad</option>
+            <option value="verified_unknown">Verified Unknown</option>
+          </select>
+          <button className="text-xs text-zinc-500 hover:text-zinc-300" onClick={()=> removeField('verification')}>✕</button>
+        </div>
+      )}
       {emailLikeSpec && (
         <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded px-2 py-1">
           <span className="text-xs text-zinc-400">Email</span>
