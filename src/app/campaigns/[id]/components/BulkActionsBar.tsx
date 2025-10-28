@@ -1,6 +1,7 @@
 "use client"
 import React, { useMemo, useSyncExternalStore, useState } from 'react'
 import { Button } from '@/components/ui/button'
+import { Sparkles, Trash2, X, ShieldCheck, Filter as FilterIcon, Download } from 'lucide-react'
 import { selectionStore } from '../use-campaign-leads'
 
 export function BulkActionsBar({
@@ -79,7 +80,9 @@ export function BulkActionsBar({
       <span className="text-xs text-zinc-400">Selected: {selectedCount}</span>
       <div className="w-px h-5 bg-zinc-800 mx-1" />
       {/* Selection-based actions */}
-      <Button variant="secondary" className="bg-violet-700/30 text-violet-300 border border-violet-800/50 hover:bg-violet-700/50" disabled={busy || allSelectedIds.length===0} onClick={()=> run(()=> doEnrich(allSelectedIds))}>Enrich</Button>
+      <Button variant="secondary" className="bg-violet-700/30 text-violet-300 border border-violet-800/50 hover:bg-violet-700/50" disabled={busy || allSelectedIds.length===0} onClick={()=> run(()=> doEnrich(allSelectedIds))}>
+        <Sparkles className="mr-1 h-4 w-4" /> Enrich
+      </Button>
       <select className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded" disabled={busy || allSelectedIds.length===0} onChange={(e)=>{
         const v = e.target.value
         if (!v) return
@@ -89,8 +92,12 @@ export function BulkActionsBar({
         <option value="">Set status…</option>
         {['none','queued','processing','done','error'].map(s=> <option key={s} value={s}>{s}</option>)}
       </select>
-      <Button variant="secondary" className="bg-red-900/20 text-red-300 border border-red-900/40 hover:bg-red-900/30" disabled={busy || allSelectedIds.length===0} onClick={()=> run(()=> doDelete(allSelectedIds))}>Delete</Button>
-      <Button variant="secondary" className="bg-zinc-900 border border-zinc-800" onClick={onClear} disabled={selectedCount===0}>Clear selection</Button>
+      <Button variant="secondary" className="bg-red-900/20 text-red-300 border border-red-900/40 hover:bg-red-900/30" disabled={busy || allSelectedIds.length===0} onClick={()=> run(()=> doDelete(allSelectedIds))}>
+        <Trash2 className="mr-1 h-4 w-4" /> Delete
+      </Button>
+      <Button variant="secondary" className="bg-zinc-900 border border-zinc-800" onClick={onClear} disabled={selectedCount===0}>
+        <X className="mr-1 h-4 w-4" /> Clear selection
+      </Button>
 
       <div className="w-px h-5 bg-zinc-800 mx-2" />
       {/* Verify actions */}
@@ -99,12 +106,16 @@ export function BulkActionsBar({
         className="bg-zinc-900 border border-zinc-800"
         disabled={allSelectedIds.length===0}
         onClick={verifySelected}
-      >Verify selected</Button>
+      >
+        <ShieldCheck className="mr-1 h-4 w-4" /> Verify selected
+      </Button>
       <Button
         variant="secondary"
         className="bg-zinc-900 border border-zinc-800"
         onClick={verifyAllFiltered}
-      >Verify all (filtered)</Button>
+      >
+        <FilterIcon className="mr-1 h-4 w-4" /> Verify all (filtered)
+      </Button>
       <div className="w-px h-5 bg-zinc-800 mx-2" />
       {/* Export actions */}
       <Button
@@ -115,7 +126,9 @@ export function BulkActionsBar({
           const url = `/api/campaigns/${campaignId}/leads/export?${exportQuery}` + (allSelectedIds.length>0? `&ids=${encodeURIComponent(allSelectedIds.join(','))}`:'')
           download(url)
         }}
-      >Export selected (CSV)</Button>
+      >
+        <Download className="mr-1 h-4 w-4" /> Export selected (CSV)
+      </Button>
       <Button
         variant="secondary"
         className="bg-zinc-900 border border-zinc-800"
@@ -123,7 +136,9 @@ export function BulkActionsBar({
           const url = `/api/campaigns/${campaignId}/leads/export?${exportQuery}`
           download(url)
         }}
-      >Export all (CSV)</Button>
+      >
+        <Download className="mr-1 h-4 w-4" /> Export all (CSV)
+      </Button>
     </div>
   )
 }

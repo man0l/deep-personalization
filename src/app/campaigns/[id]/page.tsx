@@ -5,6 +5,7 @@ import { useParams } from 'next/navigation'
 import { ColumnDef, flexRender, getCoreRowModel, getSortedRowModel, useReactTable } from '@tanstack/react-table'
 import { Input } from '@/components/ui/input'
 import { Button } from '@/components/ui/button'
+import { ArrowLeft, Sparkles } from 'lucide-react'
 import { SelectionCheckbox, HeaderSelectionCheckbox, selectionStore } from './use-campaign-leads'
 import type { Lead } from './types'
 import { ViewMenu } from './components/ViewMenu'
@@ -309,7 +310,7 @@ export default function CampaignDetail() {
     <main className="space-y-4">
       <div>
         <Button asChild variant="secondary" className="bg-zinc-900 border border-zinc-800">
-          <Link href="/campaigns">← Back to Campaigns</Link>
+          <Link href="/campaigns" className="inline-flex items-center gap-2"><ArrowLeft className="h-4 w-4" /> Back to Campaigns</Link>
         </Button>
       </div>
       <div className="text-sm text-zinc-400 flex gap-4">
@@ -332,7 +333,9 @@ export default function CampaignDetail() {
       </div>
       <div className="flex items-center gap-4">
         <Input placeholder="Search" value={q} onChange={(e)=>setQ(e.target.value)} onKeyDown={(e)=>{ if (e.key==='Enter') { setPage(1) } }} />
-        <Button onClick={enrichAllMissing} disabled={enriching} variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">Enrich All Missing (page)</Button>
+        <Button onClick={enrichAllMissing} disabled={enriching} variant="secondary" className="bg-violet-700/30 text-violet-300 hover:bg-violet-700/50">
+          <Sparkles className="mr-1 h-4 w-4" /> Enrich All Missing (page)
+        </Button>
         <FilterBuilder value={filterSpecs} onChange={(v)=>{ setFilterSpecs(v); setPage(1) }} />
         <ViewMenu
           density={density}
