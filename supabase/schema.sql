@@ -62,6 +62,25 @@ create table if not exists enrichment_jobs (
   unique(lead_id)
 );
 
+-- Email verification bulk file tracking
+create table if not exists email_verification_files (
+  id uuid primary key default gen_random_uuid(),
+  campaign_id uuid references campaigns(id) on delete cascade,
+  source text not null, -- 'selected' | 'filtered'
+  file_id text not null, -- EmailListVerify file id
+  filename text not null,
+  lines int,
+  filter_query jsonb,
+  status text,
+  lines_processed int,
+  link1 text,
+  link2 text,
+  checked_at timestamptz,
+  processed boolean not null default false,
+  created_at timestamptz not null default now()
+);
+create index if not exists evf_campaign_idx on email_verification_files(campaign_id, created_at desc);
+
 -- Queue (pgmq) for lead enrichment
 create extension if not exists pgmq;
 select pgmq.create('lead_enrichment');
@@ -275,4 +294,50 @@ exception when others then
   -- ignore
   null;
 end $$;
+
+
+-- Verification worker dispatcher using Vault (calls the verification-worker edge function)
+create or replace function public.invoke_verification_worker_vault(n int default 1)
+returns void
+language plpgsql
+security definer
+set search_path = public, vault, net
+as $$
+declare
+  base_url text;
+  functions_url text;
+  anon_key text;
+  i int;
+  target_url text;
+begin
+  select decrypted_secret into functions_url from vault.decrypted_secrets where name = 'FUNCTIONS_URL' limit 1;
+  select decrypted_secret into base_url from vault.decrypted_secrets where name = 'SUPABASE_URL' limit 1;
+  select decrypted_secret into anon_key from vault.decrypted_secrets where name = 'SUPABASE_ANON_KEY' limit 1;
+
+  if coalesce(anon_key,'') = '' then
+    raise notice 'invoke_verification_worker_vault: missing Vault secret SUPABASE_ANON_KEY';
+    return;
+  end if;
+
+  if coalesce(functions_url,'') <> '' then
+    target_url := rtrim(functions_url, '/') || '/verification-worker';
+  elsif coalesce(base_url,'') <> '' then
+    target_url := rtrim(base_url, '/') || '/functions/v1/verification-worker';
+  else
+    raise notice 'invoke_verification_worker_vault: missing Vault URL secrets (FUNCTIONS_URL or SUPABASE_URL)';
+    return;
+  end if;
+
+  for i in 1..greatest(1,n) loop
+    perform net.http_post(
+      url => target_url,
+      headers => jsonb_build_object('Authorization', 'Bearer ' || anon_key)
+    );
+  end loop;
+end;
+$$;
+
+-- Schedule the verification worker every minute (idempotent)
+do $$ begin perform cron.unschedule('verification_worker_a'); exception when others then null; end $$;
+select cron.schedule('verification_worker_a', '*/1 * * * *', $$select public.invoke_verification_worker_vault(1);$$);
 

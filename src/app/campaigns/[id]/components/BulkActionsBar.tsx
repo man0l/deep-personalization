@@ -63,7 +63,7 @@ export function BulkActionsBar({
     const ids = allSelectedIds
     if (ids.length===0) return
     await run(async ()=>{
-      await fetch('/api/leads/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids }) })
+      await fetch('/api/leads/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, campaignId }) })
     })
   }
 

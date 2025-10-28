@@ -4,27 +4,6 @@ import { supabaseServer } from '@/lib/supabase/server'
 export const runtime = 'nodejs'
 export const dynamic = 'force-dynamic'
 
-type VerifyResult = 'verified_ok' | 'verified_bad' | 'verified_unknown'
-
-function mapStatus(s: string): VerifyResult {
-  const v = s.toLowerCase()
-  if (v === 'ok' || v === 'valid') return 'verified_ok'
-  if (v.includes('invalid') || v.includes('failed') || v.includes('syntax')) return 'verified_bad'
-  return 'verified_unknown'
-}
-
-async function verifyEmail(apiKey: string, email: string): Promise<VerifyResult> {
-  const url = `https://apps.emaillistverify.com/api/verifyEmail?secret=${encodeURIComponent(apiKey)}&email=${encodeURIComponent(email)}`
-  try {
-    const res = await fetch(url, { method: 'GET' })
-    const text = (await res.text()).trim()
-    if (!res.ok) return 'verified_unknown'
-    return mapStatus(text)
-  } catch {
-    return 'verified_unknown'
-  }
-}
-
 export async function POST(req: NextRequest, context: { params: Promise<{ id: string }> | { id: string } }) {
   const p: any = await (context.params as any)
   const campaignId = (p?.id || p?.then ? (await (context.params as Promise<{ id: string }>)).id : p.id)
@@ -56,7 +35,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   if (hasIce === 'true') query = query.eq('ice_status', 'done')
   if (hasIce === 'false') query = query.neq('ice_status', 'done')
   if (status && ['done','queued','processing','error','none'].includes(status)) query = query.eq('ice_status', status)
-  if (verification && ['unverified','verified_ok','verified_bad','verified_unknown'].includes(verification)) query = query.eq('verification_status', verification)
+  if (verification && ['unverified','queued','verified_ok','verified_bad','verified_unknown'].includes(verification)) query = query.eq('verification_status', verification)
   if (q) query = query.or(`ilike(first_name,%${q}%),ilike(last_name,%${q}%),ilike(full_name,%${q}%),ilike(company_name,%${q}%),ilike(email,%${q}%),ilike(personal_email,%${q}%),ilike(title,%${q}%),ilike(industry,%${q}%)`)
   if (f_full_name) query = query.ilike('full_name', `%${f_full_name}%`)
   if (f_title) query = query.ilike('title', `%${f_title}%`)
@@ -87,24 +66,42 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     offset += chunkSize
   }
 
-  const now = new Date().toISOString()
-  let updated = 0
-  const concurrency = 5
-  let i = 0
-  while (i < emails.length) {
-    const slice = emails.slice(i, i + concurrency)
-    const results = await Promise.all(slice.map(async (l)=>{
-      const status = await verifyEmail(apiKey, l.email)
-      return { id: l.id, status }
-    }))
-    for (const r of results) {
-      const { error: upErr } = await supa.from('leads').update({ verification_status: r.status, verification_checked_at: now }).eq('id', r.id)
-      if (!upErr) updated++
-    }
-    i += concurrency
+  if (emails.length === 0) return NextResponse.json({ error: 'No emails to verify', fileId: null, scanned: 0 })
+
+  // Build content and upload to ELV as a file
+  const content = emails.map(e=> e.email.toLowerCase()).join('\n') + '\n'
+  const filename = `campaign-${campaignId}-filtered-${Date.now()}.txt`
+  const form = new FormData()
+  form.append('file_contents', new Blob([content], { type: 'text/plain' }) as any, filename)
+  const url = `https://apps.emaillistverify.com/api/verifyApiFile?secret=${encodeURIComponent(apiKey)}&filename=${encodeURIComponent(filename)}`
+  const resUpload = await fetch(url, { method: 'POST', body: form as any })
+  const fileId = (await resUpload.text()).trim()
+  if (!resUpload.ok || !fileId) return NextResponse.json({ error: fileId || 'Bulk upload failed' }, { status: 500 })
+
+  // Persist tracking row with filters snapshot
+  const filterQuery: any = {}
+  for (const [k,v] of searchParams.entries()) filterQuery[k] = v
+  await supa.from('email_verification_files').insert({
+    campaign_id: campaignId,
+    source: 'filtered',
+    file_id: fileId,
+    filename,
+    lines: emails.length,
+    filter_query: filterQuery,
+  })
+
+  // Mark matching leads as queued for verification (chunked)
+  const ids = emails.map(e=> e.id)
+  const chunk = 500
+  for (let i = 0; i < ids.length; i += chunk) {
+    const slice = ids.slice(i, i + chunk)
+    await supa
+      .from('leads')
+      .update({ verification_status: 'queued', verification_checked_at: null })
+      .in('id', slice)
   }
 
-  return NextResponse.json({ updated, scanned: emails.length })
+  return NextResponse.json({ fileId, scanned: emails.length })
 }
 
 

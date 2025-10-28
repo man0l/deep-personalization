@@ -39,7 +39,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   if (status && ['done','queued','processing','error','none'].includes(status)) {
     query = query.eq('ice_status', status)
   }
-  if (verification && ['unverified','verified_ok','verified_bad','verified_unknown'].includes(verification)) {
+  if (verification && ['unverified','queued','verified_ok','verified_bad','verified_unknown'].includes(verification)) {
     query = query.eq('verification_status', verification)
   }
   if (q) {

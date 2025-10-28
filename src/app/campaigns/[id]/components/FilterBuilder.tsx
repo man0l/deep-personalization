@@ -8,7 +8,7 @@ export type FilterSpec =
   | { field: 'full_name'|'title'|'company_name'|'email', op: 'contains', value: string }
   | { field: 'company_website', op: 'like'|'empty'|'not_empty', value?: string }
   | { field: 'email_like', op: 'like'|'empty'|'not_empty', value?: string }
-  | { field: 'verification', op: 'is', value: 'unverified'|'verified_ok'|'verified_bad'|'verified_unknown' }
+  | { field: 'verification', op: 'is', value: 'unverified'|'queued'|'verified_ok'|'verified_bad'|'verified_unknown' }
 
 export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChange: (v: FilterSpec[]) => void }) {
   const hasField = (f: FilterSpec['field']) => value.some(v => v.field === f)
@@ -130,6 +130,7 @@ export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChan
             onChange={(e)=> updateSpec('verification', { value: e.target.value as any } as any)}
           >
             <option value="unverified">Not verified</option>
+            <option value="queued">Queued</option>
             <option value="verified_ok">Verified OK</option>
             <option value="verified_bad">Verified Bad</option>
             <option value="verified_unknown">Verified Unknown</option>
