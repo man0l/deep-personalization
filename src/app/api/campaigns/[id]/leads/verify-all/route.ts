@@ -88,6 +88,7 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
     filename,
     lines: emails.length,
     filter_query: filterQuery,
+    emails: emails.map(e=> e.email.toLowerCase()),
   })
 
   // Mark matching leads as queued for verification (chunked)

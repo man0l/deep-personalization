@@ -71,6 +71,7 @@ create table if not exists email_verification_files (
   filename text not null,
   lines int,
   filter_query jsonb,
+  emails jsonb,
   status text,
   lines_processed int,
   link1 text,

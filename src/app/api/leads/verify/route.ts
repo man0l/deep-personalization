@@ -47,6 +47,7 @@ export async function POST(req: NextRequest) {
     filename,
     lines: valid.length,
     filter_query: null,
+    emails: valid.map((l:any)=> String(l.email).toLowerCase()),
   })
 
   // Mark these leads as queued for verification
