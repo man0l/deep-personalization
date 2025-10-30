@@ -96,7 +96,29 @@ export function BulkActionsBar({
         toast.error(msg)
         return
       }
-      toast.success('Verification queued', { description: `File ${payload?.fileId || ''}`.trim() })
+      // If SMTP verification payload
+      if (payload && typeof payload.processed === 'number') {
+        toast.success('Verification completed', { description: `${payload.processed} processed • OK ${payload.ok} • Bad ${payload.bad} • Unknown ${payload.unknown}` })
+      } else {
+        toast.success('Verification queued', { description: `File ${payload?.fileId || ''}`.trim() })
+      }
+    })
+  }
+
+  async function verifySelectedBulk() {
+    const ids = allSelectedIds
+    if (ids.length===0) return
+    await run(async ()=>{
+      const res = await fetch('/api/leads/bulk', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ action: 'verify', ids }) })
+      let payload: any = null
+      let raw = ''
+      try { raw = await res.text(); payload = raw ? JSON.parse(raw) : null } catch {}
+      if (!res.ok || payload?.error) {
+        const msg = extractErrorMessage(payload, raw)
+        toast.error(msg)
+        return
+      }
+      toast.success('Verification completed', { description: `${payload.processed} processed • OK ${payload.ok} • Bad ${payload.bad} • Unknown ${payload.unknown}` })
     })
   }
 
@@ -153,6 +175,14 @@ export function BulkActionsBar({
       <Button
         variant="secondary"
         className="bg-zinc-900 border border-zinc-800"
+        disabled={allSelectedIds.length===0}
+        onClick={verifySelectedBulk}
+      >
+        <ShieldCheck className="mr-1 h-4 w-4" /> Verify selected (SMTP)
+      </Button>
+      <Button
+        variant="secondary"
+        className="bg-zinc-900 border border-zinc-800"
         onClick={verifyAllFiltered}
       >
         <FilterIcon className="mr-1 h-4 w-4" /> Verify all (filtered)
@@ -178,7 +208,7 @@ export function BulkActionsBar({
           download(url)
         }}
       >
-        <Download className="mr-1 h-4 w-4" /> Export all (CSV)
+        <Download className="mr-1 h-4 w-4" /> Export all filtered (CSV)
       </Button>
     </div>
   )

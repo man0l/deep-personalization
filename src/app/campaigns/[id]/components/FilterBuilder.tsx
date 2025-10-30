@@ -9,6 +9,7 @@ export type FilterSpec =
   | { field: 'company_website', op: 'like'|'empty'|'not_empty', value?: string }
   | { field: 'email_like', op: 'like'|'empty'|'not_empty', value?: string }
   | { field: 'verification', op: 'is', value: 'unverified'|'queued'|'verified_ok'|'verified_bad'|'verified_unknown' }
+  | { field: 'enriched_at'|'verified_at', op: 'since'|'before', value?: string }
 
 export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChange: (v: FilterSpec[]) => void }) {
   const hasField = (f: FilterSpec['field']) => value.some(v => v.field === f)
@@ -39,11 +40,13 @@ export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChan
   const websiteSpec = value.find(v => v.field === 'company_website') as Extract<FilterSpec,{field:'company_website'}> | undefined
   const emailLikeSpec = value.find(v => v.field === 'email_like') as Extract<FilterSpec,{field:'email_like'}> | undefined
   const verificationSpec = value.find(v => v.field === 'verification') as Extract<FilterSpec,{field:'verification'}> | undefined
-  const textSpecs = value.filter(v => v.field !== 'status' && v.field !== 'company_website' && v.field !== 'email_like' && v.field !== 'verification') as Extract<FilterSpec,{op:'contains'}>[]
+  const enrichedSpec = value.find(v => v.field === 'enriched_at') as Extract<FilterSpec,{field:'enriched_at'}> | undefined
+  const verifiedAtSpec = value.find(v => v.field === 'verified_at') as Extract<FilterSpec,{field:'verified_at'}> | undefined
+  const textSpecs = value.filter(v => v.field !== 'status' && v.field !== 'company_website' && v.field !== 'email_like' && v.field !== 'verification' && v.field !== 'enriched_at' && v.field !== 'verified_at') as Extract<FilterSpec,{op:'contains'}>[]
 
   const availableFields: FilterSpec['field'][] = useMemo(()=>[
     ...(['status'] as const),
-    ...(['full_name','title','company_name','email','company_website','email_like','verification'] as const)
+    ...(['full_name','title','company_name','email','company_website','email_like','verification','enriched_at','verified_at'] as const)
   ].filter(f=> !hasField(f) ), [value])
 
   return (
@@ -120,6 +123,49 @@ export function FilterBuilder({ value, onChange }: { value: FilterSpec[]; onChan
       )}
 
       {/* Email pill */}
+      {/* Enriched at pill */}
+      {enrichedSpec && (
+        <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded px-2 py-1">
+          <span className="text-xs text-zinc-400">Enriched</span>
+          <select
+            className="px-1 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-xs"
+            value={(enrichedSpec as any).op}
+            onChange={(e)=> updateSpec('enriched_at', { op: e.target.value as any } as any)}
+          >
+            <option value="since">since</option>
+            <option value="before">before</option>
+          </select>
+          <input
+            type="date"
+            className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-xs"
+            value={(enrichedSpec as any).value || ''}
+            onChange={(e)=> updateSpec('enriched_at', { value: e.target.value } as any)}
+          />
+          <button className="text-xs text-zinc-500 hover:text-zinc-300" onClick={()=> removeField('enriched_at')}>✕</button>
+        </div>
+      )}
+
+      {/* Verified at pill */}
+      {verifiedAtSpec && (
+        <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded px-2 py-1">
+          <span className="text-xs text-zinc-400">Verified</span>
+          <select
+            className="px-1 py-0.5 bg-zinc-900 border border-zinc-800 rounded text-xs"
+            value={(verifiedAtSpec as any).op}
+            onChange={(e)=> updateSpec('verified_at', { op: e.target.value as any } as any)}
+          >
+            <option value="since">since</option>
+            <option value="before">before</option>
+          </select>
+          <input
+            type="date"
+            className="px-2 py-1 bg-zinc-900 border border-zinc-800 rounded text-xs"
+            value={(verifiedAtSpec as any).value || ''}
+            onChange={(e)=> updateSpec('verified_at', { value: e.target.value } as any)}
+          />
+          <button className="text-xs text-zinc-500 hover:text-zinc-300" onClick={()=> removeField('verified_at')}>✕</button>
+        </div>
+      )}
       {/* Verification pill */}
       {verificationSpec && (
         <div className="flex items-center gap-2 bg-zinc-900 border border-zinc-800 rounded px-2 py-1">

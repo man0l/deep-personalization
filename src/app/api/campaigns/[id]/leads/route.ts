@@ -15,6 +15,10 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   const idsOnly = searchParams.get('idsOnly') === 'true'
   const includeTotals = searchParams.get('includeTotals') === '1' || searchParams.get('includeTotals') === 'true'
   const verification = searchParams.get('verification') || undefined
+  const enriched_from = searchParams.get('enriched_from') || undefined
+  const enriched_to = searchParams.get('enriched_to') || undefined
+  const verified_from = searchParams.get('verified_from') || undefined
+  const verified_to = searchParams.get('verified_to') || undefined
   const f_full_name = searchParams.get('f_full_name') || undefined
   const f_title = searchParams.get('f_title') || undefined
   const f_company_name = searchParams.get('f_company_name') || undefined
@@ -27,7 +31,7 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   const f_email_not_empty = searchParams.get('f_email_not_empty') === '1' || searchParams.get('f_email_not_empty') === 'true'
 
   const supa = supabaseServer()
-  const selectCols = 'id,first_name,last_name,full_name,company_name,company_website,email,personal_email,title,industry,city,state,country,ice_breaker,ice_status,enriched_at,created_at'
+  const selectCols = 'id,first_name,last_name,full_name,company_name,company_website,email,personal_email,title,industry,city,state,country,ice_breaker,ice_status,enriched_at,verification_status,verification_checked_at,created_at'
   let query: any
   if (idsOnly) {
     query = supa.from('leads').select('id').eq('campaign_id', campaignId)
@@ -42,10 +46,22 @@ export async function GET(_req: NextRequest, context: { params: Promise<{ id: st
   if (verification && ['unverified','queued','verified_ok','verified_bad','verified_unknown'].includes(verification)) {
     query = query.eq('verification_status', verification)
   }
+  if (enriched_from) {
+    try { query = query.gte('enriched_at', new Date(enriched_from).toISOString()) } catch {}
+  }
+  if (enriched_to) {
+    try { const d = new Date(enriched_to); d.setUTCDate(d.getUTCDate()+1); query = query.lt('enriched_at', d.toISOString()) } catch {}
+  }
+  if (verified_from) {
+    try { query = query.gte('verification_checked_at', new Date(verified_from).toISOString()) } catch {}
+  }
+  if (verified_to) {
+    try { const d = new Date(verified_to); d.setUTCDate(d.getUTCDate()+1); query = query.lt('verification_checked_at', d.toISOString()) } catch {}
+  }
   if (q) {
     // Simple OR search across common fields
     query = query.or(
-      `ilike(first_name,%${q}%),ilike(last_name,%${q}%),ilike(full_name,%${q}%),ilike(company_name,%${q}%),ilike(email,%${q}%),ilike(personal_email,%${q}%),ilike(title,%${q}%),ilike(industry,%${q}%)`
+      `ilike(first_name,%${q}%),ilike(last_name,%${q}%),ilike(full_name,%${q}%),ilike(company_name,%${q}%),ilike(email,%${q}%),ilike(personal_email,%${q}%),ilike(title,%${q}%),ilike(industry,%${q}%),ilike(ice_breaker,%${q}%)`
     )
   }
   if (f_full_name) query = query.ilike('full_name', `%${f_full_name}%`)

@@ -92,6 +92,22 @@ export default function CampaignDetail() {
     }
     const textMap: any = { full_name: 'f_full_name', title: 'f_title', company_name: 'f_company_name', email: 'f_email' }
     for (const ts of filterSpecs) {
+      if ((ts as any).field === 'enriched_at') {
+        const ds: any = ts as any
+        if (ds.value) {
+          if (ds.op === 'since') paramsQ.set('enriched_from', ds.value)
+          if (ds.op === 'before') paramsQ.set('enriched_to', ds.value)
+        }
+        continue
+      }
+      if ((ts as any).field === 'verified_at') {
+        const ds: any = ts as any
+        if (ds.value) {
+          if (ds.op === 'since') paramsQ.set('verified_from', ds.value)
+          if (ds.op === 'before') paramsQ.set('verified_to', ds.value)
+        }
+        continue
+      }
       if (ts.field==='company_website') {
         const ws: any = ts as any
         if (ws.op === 'like' && ws.value) paramsQ.set('f_company_website_like', ws.value)
@@ -196,6 +212,10 @@ export default function CampaignDetail() {
       const v = row.original.enriched_at
       return <span className="text-zinc-400">{v ? new Date(v).toLocaleString() : '—'}</span>
     } },
+    { header: () => buildSortHeader('Verified','verification_checked_at'), accessorKey: 'verification_checked_at', cell: ({ row }: any) => {
+      const v = (row.original as Lead).verification_checked_at as any
+      return <span className="text-zinc-400">{v ? new Date(v).toLocaleString() : '—'}</span>
+    } },
     visibleCols.actions ? { header: 'Actions', id: 'actions', cell: ({ row }: any) => (
       <div className="flex gap-2">
         <button className="underline" onClick={async ()=>{ const lead = row.original as Lead; setDetailsLead(lead); setStatusDraft(lead.ice_status); setDetailsOpen(true) }}>Details</button>
@@ -230,7 +250,7 @@ export default function CampaignDetail() {
   }
 
   // Views: sticky first N columns + wide table for smooth horizontal scroll
-  const colWidths = [40, 220, 230, 300, 240, 260, 260, 180, 160, 170, 120, 160, 180]
+  const colWidths = [40, 220, 230, 300, 240, 260, 260, 180, 160, 170, 120, 160, 160, 180]
   const totalWidth = colWidths.reduce((a,b)=>a+b,0)
   const [frozenCount, setFrozenCount] = useState<number>(()=> 2)
   useEffect(()=>{ try { localStorage.setItem(`view:${id}:frozenCount`, String(frozenCount)) } catch{} }, [id, frozenCount])
@@ -264,6 +284,22 @@ export default function CampaignDetail() {
     }
     const textMap: any = { full_name: 'f_full_name', title: 'f_title', company_name: 'f_company_name', email: 'f_email' }
     for (const ts of filterSpecs) {
+      if ((ts as any).field === 'enriched_at') {
+        const ds: any = ts as any
+        if (ds.value) {
+          if (ds.op === 'since') paramsQ.set('enriched_from', ds.value)
+          if (ds.op === 'before') paramsQ.set('enriched_to', ds.value)
+        }
+        continue
+      }
+      if ((ts as any).field === 'verified_at') {
+        const ds: any = ts as any
+        if (ds.value) {
+          if (ds.op === 'since') paramsQ.set('verified_from', ds.value)
+          if (ds.op === 'before') paramsQ.set('verified_to', ds.value)
+        }
+        continue
+      }
       if ((ts as any).field === 'company_website') {
         const ws: any = ts as any
         if (ws.op === 'like' && ws.value) paramsQ.set('f_company_website_like', ws.value)

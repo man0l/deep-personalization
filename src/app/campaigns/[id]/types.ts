@@ -14,6 +14,8 @@ export type Lead = {
   ice_breaker: string | null
   ice_status: string
   enriched_at?: string | null
+  verification_status?: string | null
+  verification_checked_at?: string | null
 }
 
 

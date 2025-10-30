@@ -18,6 +18,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
 
   const hasIce = searchParams.get('hasIce')
   const status = searchParams.get('status') || undefined
+  const verification = searchParams.get('verification') || undefined
   const q = searchParams.get('q')?.trim().toLowerCase()
   const sortBy = searchParams.get('sortBy') || undefined
   const sortDir = (searchParams.get('sortDir') as 'asc' | 'desc' | null) || undefined
@@ -33,8 +34,12 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
   const f_email_not_empty = searchParams.get('f_email_not_empty') === '1' || searchParams.get('f_email_not_empty') === 'true'
   const idsParam = searchParams.get('ids')
   const ids = idsParam ? idsParam.split(',').map(s=> s.trim()).filter(Boolean) : undefined
+  const enriched_from = searchParams.get('enriched_from') || undefined
+  const enriched_to = searchParams.get('enriched_to') || undefined
+  const verified_from = searchParams.get('verified_from') || undefined
+  const verified_to = searchParams.get('verified_to') || undefined
 
-  const selectCols = 'id,first_name,last_name,full_name,company_name,company_website,email,personal_email,linkedin,title,industry,city,state,country,ice_breaker,ice_status,enriched_at,created_at'
+  const selectCols = 'id,first_name,last_name,full_name,company_name,company_website,email,personal_email,linkedin,title,industry,city,state,country,ice_breaker,ice_status,enriched_at,verification_status,verification_checked_at,created_at'
   const supa = supabaseServer()
 
   function buildBaseQuery() {
@@ -47,8 +52,11 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     }
     if (q) {
       query = query.or(
-        `ilike(first_name,%${q}%),ilike(last_name,%${q}%),ilike(full_name,%${q}%),ilike(company_name,%${q}%),ilike(email,%${q}%),ilike(personal_email,%${q}%),ilike(title,%${q}%),ilike(industry,%${q}%)`
+        `ilike(first_name,%${q}%),ilike(last_name,%${q}%),ilike(full_name,%${q}%),ilike(company_name,%${q}%),ilike(email,%${q}%),ilike(personal_email,%${q}%),ilike(title,%${q}%),ilike(industry,%${q}%),ilike(ice_breaker,%${q}%)`
       )
+    }
+    if (verification && ['unverified','queued','verified_ok','verified_bad','verified_unknown'].includes(verification)) {
+      query = query.eq('verification_status', verification)
     }
     if (f_full_name) query = query.ilike('full_name', `%${f_full_name}%`)
     if (f_title) query = query.ilike('title', `%${f_title}%`)
@@ -60,6 +68,10 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
     if (f_email_like) query = query.ilike('email', `%${f_email_like}%`)
     if (f_email_empty && !f_email_not_empty) query = query.or('email.is.null,email.eq.')
     if (f_email_not_empty && !f_email_empty) query = query.not('email', 'is', null).neq('email','')
+    if (enriched_from) { try { query = query.gte('enriched_at', new Date(enriched_from).toISOString()) } catch {} }
+    if (enriched_to) { try { const d = new Date(enriched_to); d.setUTCDate(d.getUTCDate()+1); query = query.lt('enriched_at', d.toISOString()) } catch {} }
+    if (verified_from) { try { query = query.gte('verification_checked_at', new Date(verified_from).toISOString()) } catch {} }
+    if (verified_to) { try { const d = new Date(verified_to); d.setUTCDate(d.getUTCDate()+1); query = query.lt('verification_checked_at', d.toISOString()) } catch {} }
     if (sortBy) {
       query = query.order(sortBy, { ascending: (sortDir ?? 'asc') === 'asc', nullsFirst: false })
     } else {
@@ -84,7 +96,7 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
   }
 
   const headers = [
-    'id','first_name','last_name','full_name','company_name','company_website','email','personal_email','linkedin','title','industry','city','state','country','ice_status','enriched_at','ice_breaker','created_at'
+    'id','first_name','last_name','full_name','company_name','company_website','email','personal_email','linkedin','title','industry','city','state','country','ice_status','enriched_at','verification_status','verified_at','ice_breaker','created_at'
   ]
   const lines: string[] = []
   lines.push(headers.map(csvEscape).join(','))
@@ -106,6 +118,8 @@ export async function GET(req: NextRequest, context: { params: Promise<{ id: str
       r.country,
       r.ice_status,
       r.enriched_at,
+      r.verification_status,
+      r.verification_checked_at,
       r.ice_breaker,
       r.created_at,
     ].map(csvEscape).join(',')
