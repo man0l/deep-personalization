@@ -27,24 +27,39 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   if (rows.length === 0) return NextResponse.json({ inserted: 0 })
 
+  // Helper function to get value from either CamelCase or snake_case column names
+  const getValue = (row: any, camelCase: string, snakeCase: string): string | null => {
+    return row[camelCase] ?? row[snakeCase] ?? null
+  }
+
   // Map common Apollo headers to our columns, store full row into raw
-  const mapped = rows.map((r) => ({
-    campaign_id: campaignId,
-    first_name: r['First Name'] ?? null,
-    last_name: r['Last Name'] ?? null,
-    full_name: r['Full Name'] ?? (([r['First Name'], r['Last Name']].filter(Boolean).join(' ')) || null),
-    company_name: r['Company Name'] ?? null,
-    company_website: (r['Company Website'] || r['Company Domain'] || '').replace(/^https?:\/\//, '') || null,
-    email: (r['Email'] ? String(r['Email']).toLowerCase() : null),
-    personal_email: (r['Personal Email'] ? String(r['Personal Email']).toLowerCase() : null),
-    linkedin: r['LinkedIn'] ?? null,
-    title: r['Title'] ?? null,
-    industry: r['Industry'] ?? null,
-    city: r['City'] ?? null,
-    state: r['State'] ?? null,
-    country: r['Country'] ?? null,
-    raw: r,
-  }))
+  // Supports both CamelCase (e.g., "First Name") and snake_case (e.g., "first_name") column names
+  const mapped = rows.map((r) => {
+    const firstName = getValue(r, 'First Name', 'first_name')
+    const lastName = getValue(r, 'Last Name', 'last_name')
+    const fullName = getValue(r, 'Full Name', 'full_name') ?? (([firstName, lastName].filter(Boolean).join(' ')) || null)
+    const companyWebsite = getValue(r, 'Company Website', 'company_website') || getValue(r, 'Company Domain', 'company_domain') || ''
+    const email = getValue(r, 'Email', 'email')
+    const personalEmail = getValue(r, 'Personal Email', 'personal_email')
+
+    return {
+      campaign_id: campaignId,
+      first_name: firstName,
+      last_name: lastName,
+      full_name: fullName,
+      company_name: getValue(r, 'Company Name', 'company_name'),
+      company_website: companyWebsite.replace(/^https?:\/\//, '') || null,
+      email: email ? String(email).toLowerCase() : null,
+      personal_email: personalEmail ? String(personalEmail).toLowerCase() : null,
+      linkedin: getValue(r, 'LinkedIn', 'linkedin'),
+      title: getValue(r, 'Title', 'title'),
+      industry: getValue(r, 'Industry', 'industry'),
+      city: getValue(r, 'City', 'city'),
+      state: getValue(r, 'State', 'state'),
+      country: getValue(r, 'Country', 'country'),
+      raw: r,
+    }
+  })
 
   // Deduplicate within this batch by (campaign_id,email) to avoid
   // "ON CONFLICT DO UPDATE command cannot affect row a second time".
