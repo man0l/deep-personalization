@@ -75,8 +75,30 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   form.append('file_contents', new Blob([content], { type: 'text/plain' }) as any, filename)
   const url = `https://bulkapi.millionverifier.com/bulkapi/v2/upload?key=${encodeURIComponent(apiKey)}&remove_duplicates=1`
   const resUpload = await fetch(url, { method: 'POST', body: form as any })
-  const fileId = (await resUpload.text()).trim()
-  if (!resUpload.ok || !fileId) return NextResponse.json({ error: fileId || 'Bulk upload failed' }, { status: 500 })
+  
+  // MillionVerifier returns JSON with file_id field, or plain text file_id
+  let fileId: string | null = null
+  const responseText = await resUpload.text().catch(() => '')
+  
+  if (!resUpload.ok) {
+    return NextResponse.json({ error: responseText || 'Bulk upload failed' }, { status: 500 })
+  }
+  
+  // Try to parse as JSON first
+  try {
+    const uploadResponse = JSON.parse(responseText)
+    if (uploadResponse && typeof uploadResponse === 'object') {
+      // Extract file_id from the response (could be file_id or fileId)
+      fileId = uploadResponse.file_id || uploadResponse.fileId || null
+    }
+  } catch {
+    // If not JSON, treat as plain text file_id
+    fileId = responseText.trim() || null
+  }
+  
+  if (!fileId) {
+    return NextResponse.json({ error: 'Bulk upload failed: no file_id returned' }, { status: 500 })
+  }
 
   // Persist tracking row with filters snapshot
   const filterQuery: any = {}
