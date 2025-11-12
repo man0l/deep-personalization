@@ -67,7 +67,7 @@ create table if not exists email_verification_files (
   id uuid primary key default gen_random_uuid(),
   campaign_id uuid references campaigns(id) on delete cascade,
   source text not null, -- 'selected' | 'filtered'
-  file_id text not null, -- EmailListVerify file id
+  file_id text not null, -- MillionVerifier file id
   filename text not null,
   lines int,
   filter_query jsonb,

@@ -26,8 +26,8 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   const f_email_not_empty = searchParams.get('f_email_not_empty') === '1' || searchParams.get('f_email_not_empty') === 'true'
   const verification = searchParams.get('verification') || undefined
 
-  const apiKey = process.env.EMAIL_LIST_VERIFY_KEY || process.env.ELV_API_KEY || ''
-  if (!apiKey) return NextResponse.json({ error: 'Missing EMAIL_LIST_VERIFY_KEY' }, { status: 500 })
+  const apiKey = process.env.EMAIL_MILLIONVERIFIER_KEY || ''
+  if (!apiKey) return NextResponse.json({ error: 'Missing EMAIL_MILLIONVERIFIER_KEY' }, { status: 500 })
 
   const supa = supabaseServer()
   const selectCols = 'id,email'
@@ -68,12 +68,12 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
 
   if (emails.length === 0) return NextResponse.json({ error: 'No emails to verify', fileId: null, scanned: 0 })
 
-  // Build content and upload to ELV as a file
+  // Build content and upload to MillionVerifier as a file
   const content = emails.map(e=> e.email.toLowerCase()).join('\n') + '\n'
   const filename = `campaign-${campaignId}-filtered-${Date.now()}.txt`
   const form = new FormData()
   form.append('file_contents', new Blob([content], { type: 'text/plain' }) as any, filename)
-  const url = `https://apps.emaillistverify.com/api/verifyApiFile?secret=${encodeURIComponent(apiKey)}&filename=${encodeURIComponent(filename)}`
+  const url = `https://bulkapi.millionverifier.com/bulkapi/v2/upload?key=${encodeURIComponent(apiKey)}&remove_duplicates=1`
   const resUpload = await fetch(url, { method: 'POST', body: form as any })
   const fileId = (await resUpload.text()).trim()
   if (!resUpload.ok || !fileId) return NextResponse.json({ error: fileId || 'Bulk upload failed' }, { status: 500 })
