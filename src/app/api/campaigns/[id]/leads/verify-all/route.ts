@@ -88,13 +88,23 @@ export async function POST(req: NextRequest, context: { params: Promise<{ id: st
   try {
     const uploadResponse = JSON.parse(responseText)
     if (uploadResponse && typeof uploadResponse === 'object') {
-      // Extract file_id from the response (could be file_id or fileId)
-      fileId = uploadResponse.file_id || uploadResponse.fileId || null
+      // Extract file_id from the response - check multiple possible field names
+      // Log the full response for debugging
+      console.log('MillionVerifier upload response:', JSON.stringify(uploadResponse).substring(0, 500))
+      fileId = uploadResponse.file_id || 
+               uploadResponse.fileId || 
+               uploadResponse.id || 
+               uploadResponse.fileid ||
+               uploadResponse.FILE_ID ||
+               null
     }
   } catch {
     // If not JSON, treat as plain text file_id
     fileId = responseText.trim() || null
   }
+  
+  // Log the extracted file_id for debugging
+  console.log('Extracted file_id from upload:', fileId)
   
   if (!fileId) {
     return NextResponse.json({ error: 'Bulk upload failed: no file_id returned' }, { status: 500 })
