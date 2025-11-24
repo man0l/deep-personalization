@@ -138,6 +138,22 @@ export function BulkActionsBar({
     })
   }
 
+  async function enrichAllFiltered() {
+    const url = `/api/campaigns/${campaignId}/leads/enrich-all?${exportQuery}`
+    await run(async ()=>{
+      const res = await fetch(url, { method: 'POST' })
+      let payload: any = null
+      let raw = ''
+      try { raw = await res.text(); payload = raw ? JSON.parse(raw) : null } catch {}
+      if (!res.ok || payload?.error) {
+        const msg = extractErrorMessage(payload, raw)
+        toast.error(msg)
+        return
+      }
+      toast.success('Enrichment queued', { description: `${payload?.queued ?? 0} of ${payload?.total ?? 0} leads queued` })
+    })
+  }
+
   return (
     <div className="flex flex-wrap items-center gap-2 bg-zinc-900/60 border border-zinc-800 rounded px-2 py-2">
       <span className="text-xs text-zinc-400">Selected: {selectedCount}</span>
@@ -186,6 +202,13 @@ export function BulkActionsBar({
         onClick={verifyAllFiltered}
       >
         <FilterIcon className="mr-1 h-4 w-4" /> Verify all (filtered)
+      </Button>
+      <Button
+        variant="secondary"
+        className="bg-violet-700/30 text-violet-300 border border-violet-800/50 hover:bg-violet-700/50"
+        onClick={enrichAllFiltered}
+      >
+        <Sparkles className="mr-1 h-4 w-4" /> Enrich (filtered)
       </Button>
       <div className="w-px h-5 bg-zinc-800 mx-2" />
       {/* Export actions */}
