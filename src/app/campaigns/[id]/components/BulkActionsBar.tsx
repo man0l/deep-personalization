@@ -87,7 +87,11 @@ export function BulkActionsBar({
     const ids = allSelectedIds
     if (ids.length===0) return
     await run(async ()=>{
-      const res = await fetch('/api/leads/verify', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ ids, campaignId }) })
+      const res = await fetch(`/api/campaigns/${campaignId}/leads/verify-selected`, { 
+        method: 'POST', 
+        headers: { 'Content-Type': 'application/json' }, 
+        body: JSON.stringify({ ids }) 
+      })
       let payload: any = null
       let raw = ''
       try { raw = await res.text(); payload = raw ? JSON.parse(raw) : null } catch {}
@@ -96,12 +100,7 @@ export function BulkActionsBar({
         toast.error(msg)
         return
       }
-      // If SMTP verification payload
-      if (payload && typeof payload.processed === 'number') {
-        toast.success('Verification completed', { description: `${payload.processed} processed • OK ${payload.ok} • Bad ${payload.bad} • Unknown ${payload.unknown}` })
-      } else {
-        toast.success('Verification queued', { description: `File ${payload?.fileId || ''}`.trim() })
-      }
+      toast.success('Verification queued', { description: `${payload?.scanned ?? 0} emails • File ${payload?.fileId || ''}`.trim() })
     })
   }
 
